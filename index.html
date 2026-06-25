@@ -152,6 +152,36 @@
       cursor: not-allowed;
     }
 
+    .depthBox {
+      display: grid;
+      grid-template-columns: auto minmax(72px, 130px) auto 1fr;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      font-size: clamp(11px, 2.1vw, 14px);
+      font-weight: 800;
+    }
+
+    #depthInput {
+      width: 100%;
+      min-height: 32px;
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 9px;
+      padding: 4px 8px;
+      background: rgba(255,255,255,0.92);
+      color: #111827;
+      font-size: clamp(14px, 2.6vw, 18px);
+      font-weight: 900;
+      text-align: center;
+    }
+
+    #reachPreview {
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     #infoPanel {
       position: absolute;
       z-index: 4;
@@ -162,6 +192,7 @@
       grid-template-columns: auto 1fr;
       grid-template-areas:
         "angle status"
+        "reach reach"
         "frame skin";
       gap: 3px 10px;
       align-items: center;
@@ -199,6 +230,15 @@
 
     #frameInfo {
       grid-area: frame;
+    }
+
+    #reachInfo {
+      grid-area: reach;
+      color: #ffffff;
+      font-size: clamp(12px, 2.3vw, 16px);
+      font-weight: 900;
+      line-height: 1.2;
+      text-align: center;
     }
 
     #skinInfo {
@@ -240,7 +280,8 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .sliderBox {
+      .sliderBox,
+      .depthBox {
         grid-template-columns: 1fr;
         gap: 2px;
       }
@@ -250,6 +291,7 @@
         grid-template-areas:
           "angle"
           "status"
+          "reach"
           "frame"
           "skin";
         text-align: center;
@@ -290,11 +332,27 @@
             oninput="onSliderMove()"
           />
         </div>
+
+        <div class="depthBox">
+          <label for="depthInput">血管深さ</label>
+          <input
+            type="number"
+            id="depthInput"
+            inputmode="decimal"
+            min="0"
+            step="0.1"
+            placeholder="mm"
+            oninput="updateReachDisplay(lastAngleValue)"
+          />
+          <span>mm</span>
+          <span id="reachPreview">推定到達距離：--.- mm</span>
+        </div>
       </div>
 
       <div id="infoPanel">
         <div id="angleWrap">刺入角：<span id="angle">--.-°</span></div>
         <div id="status">OpenCV.js読み込み中</div>
+        <div id="reachInfo">推定到達距離：深さを入力してください</div>
         <div id="orientationHint">カメラ開始時に横画面ロックを試行します</div>
         <div id="frameInfo">保存フレーム：0 / 150</div>
         <div id="skinInfo">皮膚基準線：未設定</div>
@@ -304,6 +362,7 @@
 
   <details class="note">
     <summary>使い方・設定</summary>
+    血管深さをmmで入力すると、現在の刺入角から針先が血管深さに到達するまでの推定進行距離を計算します。計算式は「推定到達距離 = 血管深さ ÷ sin(刺入角)」です。
   </details>
 
   <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
@@ -318,6 +377,9 @@
     const frameInfo = document.getElementById("frameInfo");
     const skinInfo = document.getElementById("skinInfo");
     const orientationHint = document.getElementById("orientationHint");
+    const reachInfo = document.getElementById("reachInfo");
+    const depthInput = document.getElementById("depthInput");
+    const reachPreview = document.getElementById("reachPreview");
     const pauseBtn = document.getElementById("pauseBtn");
     const frameSlider = document.getElementById("frameSlider");
 
@@ -631,6 +693,7 @@
         frameSlider.value = 0;
 
         angleText.textContent = "--.-°";
+        updateReachDisplay(null);
         statusText.textContent = "測定中";
         statusText.className = "";
 
@@ -667,6 +730,7 @@
       lastAngleValue = null;
 
       angleText.textContent = "--.-°";
+      updateReachDisplay(null);
       statusText.textContent = "停止中";
       statusText.className = "";
       pauseBtn.textContent = "一時停止";
@@ -882,6 +946,49 @@
       animationId = requestAnimationFrame(processFrame);
     }
 
+
+    function getDepthMm() {
+      const value = Number(depthInput.value);
+      if (!Number.isFinite(value) || value <= 0) return null;
+      return value;
+    }
+
+    function calcReachDistanceMm(depthMm, angleDeg) {
+      if (!Number.isFinite(depthMm) || depthMm <= 0) return null;
+      if (!Number.isFinite(angleDeg) || angleDeg <= 0) return null;
+
+      const rad = angleDeg * Math.PI / 180;
+      const sinValue = Math.sin(rad);
+      if (sinValue <= 0.001) return null;
+
+      return depthMm / sinValue;
+    }
+
+    function formatReachText(angleDeg) {
+      const depthMm = getDepthMm();
+
+      if (depthMm === null) {
+        return "推定到達距離：深さを入力してください";
+      }
+
+      if (!Number.isFinite(angleDeg) || angleDeg <= 0) {
+        return `推定到達距離：--.- mm｜深さ ${depthMm.toFixed(1)} mm`;
+      }
+
+      const reachMm = calcReachDistanceMm(depthMm, angleDeg);
+      if (reachMm === null) {
+        return `推定到達距離：計算不可｜深さ ${depthMm.toFixed(1)} mm`;
+      }
+
+      return `推定到達距離：約 ${reachMm.toFixed(1)} mm｜深さ ${depthMm.toFixed(1)} mm`;
+    }
+
+    function updateReachDisplay(angleDeg) {
+      const text = formatReachText(angleDeg);
+      reachInfo.textContent = text;
+      reachPreview.textContent = text;
+    }
+
     function drawOverlays(bestLine, angleValue, statusValue, statusClassValue) {
       drawDetectionRoi();
       drawSkinReferenceLine();
@@ -889,11 +996,13 @@
       if (bestLine && angleValue !== null) {
         drawNeedleLine(bestLine);
         angleText.textContent = angleValue.toFixed(1) + "°";
+        updateReachDisplay(angleValue);
         drawAngleTextOnCanvas(angleValue, bestLine);
         statusText.textContent = statusValue;
         statusText.className = statusClassValue;
       } else {
         angleText.textContent = "--.-°";
+        updateReachDisplay(null);
         statusText.textContent = statusValue || "皮膚基準線付近で針を検出できません";
         statusText.className = statusClassValue || "warn";
       }
@@ -926,8 +1035,10 @@
 
       if (frame.angle !== null) {
         angleText.textContent = frame.angle.toFixed(1) + "°";
+        updateReachDisplay(frame.angle);
       } else {
         angleText.textContent = "--.-°";
+        updateReachDisplay(null);
       }
 
       statusText.textContent = (frame.status || "確認中") + "｜静止画確認中";
@@ -1079,9 +1190,12 @@
     function drawAngleTextOnCanvas(angle, line = null) {
       ctx.save();
 
+      const depthMm = getDepthMm();
+      const reachMm = depthMm === null ? null : calcReachDistanceMm(depthMm, angle);
       const label = `${angle.toFixed(1)}°`;
-      const boxWidth = 132;
-      const boxHeight = 54;
+      const subLabel = reachMm === null ? null : `到達 ${reachMm.toFixed(1)}mm`;
+      const boxWidth = subLabel ? 172 : 132;
+      const boxHeight = subLabel ? 72 : 54;
 
       let center = { x: canvasW * 0.50, y: canvasH * 0.28 };
       let pointer = null;
@@ -1152,10 +1266,19 @@
       roundRect(ctx, x, y, boxWidth, boxHeight, 12, false, true);
 
       ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 34px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(label, center.x, center.y);
+
+      if (subLabel) {
+        ctx.font = "bold 30px sans-serif";
+        ctx.fillText(label, center.x, center.y - 12);
+        ctx.font = "bold 18px sans-serif";
+        ctx.fillText(subLabel, center.x, center.y + 20);
+      } else {
+        ctx.font = "bold 34px sans-serif";
+        ctx.fillText(label, center.x, center.y);
+      }
+
       ctx.restore();
     }
 
@@ -1229,6 +1352,7 @@
     }
 
     updateSkinInfo();
+    updateReachDisplay(null);
   </script>
 </body>
 </html>
