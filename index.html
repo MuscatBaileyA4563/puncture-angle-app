@@ -34,15 +34,13 @@
     }
 
     body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
     }
 
     #appShell {
       position: relative;
-      width: min(100vw, calc(100dvh * 16 / 9));
-      height: min(100dvh, calc(100vw * 9 / 16));
+      width: 100vw;
+      height: 100dvh;
       background: #000;
       overflow: hidden;
     }
@@ -86,32 +84,39 @@
       right: max(8px, env(safe-area-inset-right));
       display: grid;
       grid-template-columns: 1fr;
-      gap: 6px;
-      padding: 8px;
-      border-radius: 14px;
-      background: rgba(0, 0, 0, 0.42);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
+      gap: 5px;
+      padding: 0;
+      background: transparent;
     }
 
     .buttonRow {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 7px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-start;
+      align-items: center;
+      flex-wrap: nowrap;
     }
 
     button {
-      min-height: 40px;
-      border: 1px solid rgba(255,255,255,0.18);
-      border-radius: 10px;
-      padding: 7px 4px;
-      background: var(--primary);
+      min-width: 58px;
+      min-height: 58px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 14px;
+      padding: 6px 4px 4px;
+      background: rgba(17, 24, 39, 0.74);
       color: #fff;
-      font-size: clamp(12px, 2.4vw, 16px);
+      font-size: 11px;
       font-weight: 800;
       cursor: pointer;
       touch-action: manipulation;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
     }
 
     button:active {
@@ -123,9 +128,21 @@
       cursor: not-allowed;
     }
 
-    #pauseBtn { background: var(--warning); }
-    #stopBtn { background: var(--danger); }
-    #fullscreenBtn { background: #374151; }
+    #pauseBtn { background: rgba(245, 158, 11, 0.88); }
+    #stopBtn { background: rgba(220, 38, 38, 0.88); }
+    #fullscreenBtn { background: rgba(55, 65, 81, 0.88); }
+
+    .btnIcon {
+      font-size: 22px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .btnText {
+      font-size: 10px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+    }
 
     .sliderBox {
       display: grid;
@@ -133,8 +150,13 @@
       align-items: center;
       gap: 8px;
       color: var(--muted);
-      font-size: clamp(11px, 2.1vw, 14px);
+      font-size: clamp(10px, 1.8vw, 12px);
       font-weight: 700;
+      padding: 6px 10px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
     }
 
     .sliderLabel {
@@ -143,7 +165,7 @@
 
     #frameSlider {
       width: 100%;
-      height: 28px;
+      height: 22px;
       cursor: pointer;
     }
 
@@ -154,23 +176,28 @@
 
     .depthBox {
       display: grid;
-      grid-template-columns: auto minmax(72px, 130px) auto 1fr;
+      grid-template-columns: auto minmax(68px, 86px) auto 1fr;
       align-items: center;
       gap: 8px;
       color: #fff;
-      font-size: clamp(11px, 2.1vw, 14px);
+      font-size: clamp(10px, 1.8vw, 12px);
       font-weight: 800;
+      padding: 6px 10px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
     }
 
     #depthInput {
       width: 100%;
-      min-height: 32px;
-      border: 1px solid rgba(255,255,255,0.35);
-      border-radius: 9px;
-      padding: 4px 8px;
+      min-height: 28px;
+      border: 1px solid rgba(255,255,255,0.32);
+      border-radius: 8px;
+      padding: 3px 8px;
       background: rgba(255,255,255,0.92);
       color: #111827;
-      font-size: clamp(14px, 2.6vw, 18px);
+      font-size: clamp(13px, 2.2vw, 16px);
       font-weight: 900;
       text-align: center;
     }
@@ -194,13 +221,13 @@
         "angle status"
         "reach reach"
         "frame skin";
-      gap: 3px 10px;
+      gap: 2px 8px;
       align-items: center;
-      padding: 7px 10px;
+      padding: 5px 8px;
       border-radius: 12px;
-      background: rgba(0, 0, 0, 0.45);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
+      background: rgba(0, 0, 0, 0.30);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       color: #fff;
       text-align: left;
       pointer-events: none;
@@ -208,23 +235,23 @@
 
     #angleWrap {
       grid-area: angle;
-      font-size: clamp(12px, 2.2vw, 16px);
+      font-size: clamp(11px, 1.8vw, 14px);
       font-weight: 800;
       white-space: nowrap;
-      line-height: 1.1;
+      line-height: 1.05;
     }
 
     #angle {
       color: #ffffff;
-      font-size: clamp(20px, 4.2vw, 34px);
+      font-size: clamp(18px, 3vw, 26px);
       letter-spacing: -0.03em;
     }
 
     #status {
       grid-area: status;
-      font-size: clamp(13px, 2.5vw, 18px);
+      font-size: clamp(11px, 2vw, 15px);
       font-weight: 900;
-      line-height: 1.2;
+      line-height: 1.15;
       text-align: right;
     }
 
@@ -235,9 +262,9 @@
     #reachInfo {
       grid-area: reach;
       color: #ffffff;
-      font-size: clamp(12px, 2.3vw, 16px);
+      font-size: clamp(11px, 1.9vw, 14px);
       font-weight: 900;
-      line-height: 1.2;
+      line-height: 1.1;
       text-align: center;
     }
 
@@ -250,8 +277,8 @@
     #skinInfo,
     #orientationHint {
       color: var(--muted);
-      font-size: clamp(10px, 1.9vw, 13px);
-      line-height: 1.2;
+      font-size: clamp(9px, 1.5vw, 11px);
+      line-height: 1.1;
     }
 
     #orientationHint {
@@ -267,23 +294,19 @@
     }
 
     @media (orientation: portrait) {
-      #appShell {
-        width: 100vw;
-        height: min(100dvh, calc(100vw * 9 / 16 + 140px));
-      }
-
-      .topOverlay {
-        top: max(6px, env(safe-area-inset-top));
-      }
-
       .buttonRow {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      button {
+        min-width: 52px;
+        min-height: 52px;
       }
 
       .sliderBox,
       .depthBox {
         grid-template-columns: 1fr;
-        gap: 2px;
+        gap: 4px;
       }
 
       #infoPanel {
@@ -313,14 +336,14 @@
 
       <div class="topOverlay">
         <div class="buttonRow">
-          <button type="button" onclick="startCamera()">カメラ開始</button>
-          <button type="button" id="pauseBtn" onclick="togglePause()">一時停止</button>
-          <button type="button" id="stopBtn" onclick="stopCamera()">停止</button>
-          <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()">全画面/横向き</button>
+          <button type="button" onclick="startCamera()" aria-label="カメラ開始"><span class="btnIcon">📷</span><span class="btnText">開始</span></button>
+          <button type="button" id="pauseBtn" onclick="togglePause()" aria-label="一時停止"><span class="btnIcon">⏸</span><span class="btnText">停止</span></button>
+          <button type="button" id="stopBtn" onclick="stopCamera()" aria-label="終了"><span class="btnIcon">■</span><span class="btnText">終了</span></button>
+          <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()" aria-label="全画面"><span class="btnIcon">⛶</span><span class="btnText">全画面</span></button>
         </div>
 
         <div class="sliderBox">
-          <div class="sliderLabel">フレーム確認</div>
+          <div class="sliderLabel">確認</div>
           <input
             type="range"
             id="frameSlider"
@@ -352,7 +375,7 @@
       <div id="infoPanel">
         <div id="angleWrap">刺入角：<span id="angle">--.-°</span></div>
         <div id="status">OpenCV.js読み込み中</div>
-        <div id="reachInfo">推定到達距離：深さを入力してください</div>
+        <div id="reachInfo">到達距離：深さ入力で自動計算</div>
         <div id="orientationHint">カメラ開始時に横画面ロックを試行します</div>
         <div id="frameInfo">保存フレーム：0 / 150</div>
         <div id="skinInfo">皮膚基準線：未設定</div>
@@ -442,6 +465,7 @@
       }
     }
     waitForOpenCV();
+    setPauseButtonState(false);
 
     updateOrientationHint();
     window.addEventListener("resize", updateOrientationHint);
@@ -454,6 +478,13 @@
       orientationHint.textContent = isPortrait
         ? "縦向きです：カメラ開始または全画面/横向きで横画面ロックを試行します"
         : "横向き表示中：皮膚線ハンドルを指で調整できます";
+    }
+
+    function setPauseButtonState(isPaused) {
+      pauseBtn.innerHTML = isPaused
+        ? '<span class="btnIcon">▶</span><span class="btnText">再開</span>'
+        : '<span class="btnIcon">⏸</span><span class="btnText">停止</span>';
+      pauseBtn.setAttribute('aria-label', isPaused ? '再開' : '一時停止');
     }
 
     // ------------------------------
@@ -686,7 +717,7 @@
         processing = true;
         paused = false;
 
-        pauseBtn.textContent = "一時停止";
+        setPauseButtonState(false);
         frameSlider.disabled = true;
         frameSlider.min = 0;
         frameSlider.max = 0;
@@ -733,7 +764,7 @@
       updateReachDisplay(null);
       statusText.textContent = "停止中";
       statusText.className = "";
-      pauseBtn.textContent = "一時停止";
+      setPauseButtonState(false);
 
       frameSlider.disabled = true;
       frameSlider.min = 0;
@@ -750,7 +781,7 @@
       paused = !paused;
 
       if (paused) {
-        pauseBtn.textContent = "再開";
+        setPauseButtonState(true);
         reviewIndex = frameBuffer.length - 1;
         setupSliderForReview();
 
@@ -759,7 +790,7 @@
           showBufferedFrame(reviewIndex);
         }
       } else {
-        pauseBtn.textContent = "一時停止";
+        setPauseButtonState(false);
         statusText.textContent = "測定中";
         statusText.className = "";
         reviewIndex = -1;
