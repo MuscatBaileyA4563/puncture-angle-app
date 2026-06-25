@@ -7,15 +7,12 @@
 
   <style>
     :root {
-      --bg: #f5f7fb;
-      --card: #ffffff;
-      --text: #1f2937;
-      --muted: #6b7280;
       --primary: #1f6feb;
       --warning: #f59e0b;
       --danger: #dc2626;
-      --ok: #15803d;
-      --border: #111827;
+      --ok: #22c55e;
+      --text: #ffffff;
+      --muted: rgba(255,255,255,0.78);
     }
 
     * {
@@ -27,117 +24,36 @@
       margin: 0;
       padding: 0;
       width: 100%;
-      min-height: 100%;
-      background: var(--bg);
+      height: 100%;
+      overflow: hidden;
+      background: #000;
       color: var(--text);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", "Meiryo", sans-serif;
-      text-align: center;
       overscroll-behavior: none;
+      touch-action: none;
     }
 
     body {
-      padding: max(10px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    h1 {
-      margin: 4px 0 4px;
-      font-size: clamp(18px, 5vw, 26px);
-      line-height: 1.25;
-    }
-
-    .sub {
-      margin: 0 auto 10px;
-      max-width: 960px;
-      color: var(--muted);
-      font-size: clamp(12px, 3.4vw, 15px);
-      line-height: 1.45;
-    }
-
-    .controls {
-      width: min(100%, 960px);
-      margin: 0 auto 10px;
-    }
-
-    .buttonRow {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    button {
-      min-height: 46px;
-      border: none;
-      border-radius: 10px;
-      padding: 8px 6px;
-      background: var(--primary);
-      color: #fff;
-      font-size: clamp(13px, 3.6vw, 17px);
-      font-weight: 700;
-      cursor: pointer;
-      touch-action: manipulation;
-    }
-
-    button:active {
-      transform: scale(0.98);
-    }
-
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    #pauseBtn {
-      background: var(--warning);
-    }
-
-    #stopBtn {
-      background: var(--danger);
-    }
-
-    #fullscreenBtn {
-      background: #374151;
-    }
-
-    .sliderBox {
-      background: var(--card);
-      border-radius: 12px;
-      padding: 10px 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-
-    .sliderLabel {
-      margin-bottom: 6px;
-      color: #4b5563;
-      font-size: clamp(12px, 3.3vw, 15px);
-    }
-
-    #frameSlider {
-      width: 100%;
-      height: 34px;
-      cursor: pointer;
-    }
-
-    #frameSlider:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-
-    .stageWrap {
-      width: min(100%, 960px);
-      margin: 0 auto;
+    #appShell {
+      position: relative;
+      width: min(100vw, calc(100dvh * 16 / 9));
+      height: min(100dvh, calc(100vw * 9 / 16));
+      background: #000;
+      overflow: hidden;
     }
 
     #container {
-      position: relative;
+      position: absolute;
+      inset: 0;
       width: 100%;
-      aspect-ratio: 16 / 9;
-      max-height: calc(100vh - 250px);
-      min-height: 210px;
-      border: 2px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
+      height: 100%;
       background: #000;
+      overflow: hidden;
       touch-action: none;
       user-select: none;
     }
@@ -151,238 +67,243 @@
     }
 
     video {
-      object-fit: cover;
+      z-index: 1;
+      object-fit: fill;
+      background: #000;
     }
 
     canvas {
+      z-index: 2;
       cursor: crosshair;
       touch-action: none;
     }
 
+    .topOverlay {
+      position: absolute;
+      z-index: 5;
+      top: max(6px, env(safe-area-inset-top));
+      left: max(8px, env(safe-area-inset-left));
+      right: max(8px, env(safe-area-inset-right));
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    .buttonRow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    button {
+      min-height: 40px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 10px;
+      padding: 7px 4px;
+      background: var(--primary);
+      color: #fff;
+      font-size: clamp(12px, 2.4vw, 16px);
+      font-weight: 800;
+      cursor: pointer;
+      touch-action: manipulation;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    #pauseBtn { background: var(--warning); }
+    #stopBtn { background: var(--danger); }
+    #fullscreenBtn { background: #374151; }
+
+    .sliderBox {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: clamp(11px, 2.1vw, 14px);
+      font-weight: 700;
+    }
+
+    .sliderLabel {
+      white-space: nowrap;
+    }
+
+    #frameSlider {
+      width: 100%;
+      height: 28px;
+      cursor: pointer;
+    }
+
+    #frameSlider:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
     #infoPanel {
-      width: min(100%, 960px);
-      margin: 10px auto 0;
-      background: var(--card);
+      position: absolute;
+      z-index: 4;
+      left: max(8px, env(safe-area-inset-left));
+      right: max(8px, env(safe-area-inset-right));
+      bottom: max(6px, env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-columns: auto 1fr;
+      grid-template-areas:
+        "angle status"
+        "frame skin";
+      gap: 3px 10px;
+      align-items: center;
+      padding: 7px 10px;
       border-radius: 12px;
-      padding: 10px 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      color: #fff;
+      text-align: left;
+      pointer-events: none;
     }
 
     #angleWrap {
-      margin-bottom: 3px;
-      font-size: clamp(18px, 5vw, 26px);
+      grid-area: angle;
+      font-size: clamp(12px, 2.2vw, 16px);
       font-weight: 800;
-      line-height: 1.2;
+      white-space: nowrap;
+      line-height: 1.1;
     }
 
     #angle {
-      color: #0055cc;
-      font-size: clamp(34px, 11vw, 52px);
+      color: #ffffff;
+      font-size: clamp(20px, 4.2vw, 34px);
       letter-spacing: -0.03em;
     }
 
     #status {
-      margin-top: 4px;
-      font-size: clamp(16px, 4.8vw, 28px);
-      font-weight: 800;
-      line-height: 1.35;
+      grid-area: status;
+      font-size: clamp(13px, 2.5vw, 18px);
+      font-weight: 900;
+      line-height: 1.2;
+      text-align: right;
+    }
+
+    #frameInfo {
+      grid-area: frame;
+    }
+
+    #skinInfo {
+      grid-area: skin;
+      text-align: right;
     }
 
     #frameInfo,
     #skinInfo,
     #orientationHint {
-      margin-top: 5px;
       color: var(--muted);
-      font-size: clamp(12px, 3.3vw, 16px);
-      line-height: 1.4;
+      font-size: clamp(10px, 1.9vw, 13px);
+      line-height: 1.2;
     }
 
     #orientationHint {
-      color: #92400e;
-      font-weight: 700;
+      display: none;
     }
 
-    .ok {
-      color: var(--ok);
-    }
-
-    .warn {
-      color: var(--danger);
-    }
-
-    .paused {
-      color: #b45309;
-    }
+    .ok { color: #4ade80; }
+    .warn { color: #ff6b6b; }
+    .paused { color: #fbbf24; }
 
     details.note {
-      width: min(100%, 960px);
-      margin: 10px auto 0;
-      text-align: left;
-      background: var(--card);
-      border-radius: 12px;
-      padding: 10px 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      line-height: 1.7;
-      font-size: clamp(13px, 3.5vw, 15px);
+      display: none;
     }
 
-    details.note summary {
-      cursor: pointer;
-      font-weight: 800;
-      text-align: center;
-      list-style-position: inside;
-    }
-
-    details.note b {
-      color: #111;
-    }
-
-    code {
-      background: #f1f5f9;
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-size: 0.95em;
-    }
-
-    @media (orientation: landscape) and (max-height: 520px) {
-      body {
-        padding: 6px max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left));
+    @media (orientation: portrait) {
+      #appShell {
+        width: 100vw;
+        height: min(100dvh, calc(100vw * 9 / 16 + 140px));
       }
 
-      h1,
-      .sub,
-      details.note {
-        display: none;
-      }
-
-      .controls {
-        margin-bottom: 6px;
+      .topOverlay {
+        top: max(6px, env(safe-area-inset-top));
       }
 
       .buttonRow {
-        grid-template-columns: repeat(4, 1fr);
-        gap: 6px;
-        margin-bottom: 6px;
-      }
-
-      button {
-        min-height: 38px;
-        border-radius: 8px;
-        font-size: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .sliderBox {
-        padding: 6px 8px;
-      }
-
-      .sliderLabel {
-        display: none;
-      }
-
-      #frameSlider {
-        height: 26px;
-      }
-
-      #container {
-        max-height: calc(100vh - 138px);
-        min-height: 190px;
+        grid-template-columns: 1fr;
+        gap: 2px;
       }
 
       #infoPanel {
-        margin-top: 6px;
-        padding: 6px 8px;
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "angle"
+          "status"
+          "frame"
+          "skin";
+        text-align: center;
       }
 
-      #angleWrap {
-        font-size: 18px;
-      }
-
-      #angle {
-        font-size: 32px;
-      }
-
-      #status {
-        font-size: 16px;
-        margin-top: 2px;
-      }
-
-      #frameInfo,
-      #skinInfo,
-      #orientationHint {
-        font-size: 12px;
-        margin-top: 2px;
+      #status,
+      #skinInfo {
+        text-align: center;
       }
     }
   </style>
 </head>
 
 <body>
-  <h1>穿刺針 刺入角 自動測定アプリ</h1>
-  <div class="sub">スマホブラウザ対応版：横向き表示推奨。皮膚基準線を指で調整して刺入角を測定します。</div>
-
-  <div class="controls">
-    <div class="buttonRow">
-      <button type="button" onclick="startCamera()">カメラ開始</button>
-      <button type="button" id="pauseBtn" onclick="togglePause()">一時停止</button>
-      <button type="button" id="stopBtn" onclick="stopCamera()">停止</button>
-      <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()">全画面</button>
-    </div>
-
-    <div class="sliderBox">
-      <div class="sliderLabel">フレーム確認：一時停止中に操作できます</div>
-      <input
-        type="range"
-        id="frameSlider"
-        min="0"
-        max="0"
-        value="0"
-        step="1"
-        disabled
-        oninput="onSliderMove()"
-      />
-    </div>
-  </div>
-
-  <div class="stageWrap">
+  <div id="appShell">
     <div id="container">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="canvas" width="960" height="540"></canvas>
-    </div>
-  </div>
 
-  <div id="infoPanel">
-    <div id="angleWrap">刺入角：<span id="angle">--.-°</span></div>
-    <div id="status">OpenCV.js読み込み中</div>
-    <div id="orientationHint">スマホでは横向き＋全画面表示が見やすいです</div>
-    <div id="frameInfo">保存フレーム：0 / 150</div>
-    <div id="skinInfo">皮膚基準線：未設定</div>
+      <div class="topOverlay">
+        <div class="buttonRow">
+          <button type="button" onclick="startCamera()">カメラ開始</button>
+          <button type="button" id="pauseBtn" onclick="togglePause()">一時停止</button>
+          <button type="button" id="stopBtn" onclick="stopCamera()">停止</button>
+          <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()">全画面</button>
+        </div>
+
+        <div class="sliderBox">
+          <div class="sliderLabel">フレーム確認</div>
+          <input
+            type="range"
+            id="frameSlider"
+            min="0"
+            max="0"
+            value="0"
+            step="1"
+            disabled
+            oninput="onSliderMove()"
+          />
+        </div>
+      </div>
+
+      <div id="infoPanel">
+        <div id="angleWrap">刺入角：<span id="angle">--.-°</span></div>
+        <div id="status">OpenCV.js読み込み中</div>
+        <div id="orientationHint">横向き＋全画面表示推奨</div>
+        <div id="frameInfo">保存フレーム：0 / 150</div>
+        <div id="skinInfo">皮膚基準線：未設定</div>
+      </div>
+    </div>
   </div>
 
   <details class="note">
     <summary>使い方・設定</summary>
-    <br>
-    <b>使い方</b><br>
-    1. 「カメラ開始」を押す<br>
-    2. 緑線の左右の丸ハンドルを指でドラッグして、皮膚面の傾きに合わせる<br>
-    3. 緑線そのものをドラッグすると、皮膚基準線全体を移動できます<br>
-    4. 赤線が針候補です<br>
-    5. 角度は画面上部中央と下部パネルに表示されます<br>
-    6. 一時停止中はスライダーで直近フレームを確認できます<br><br>
-
-    <b>判定基準</b><br>
-    適正刺入角は <b>25±3°</b>、つまり <b>22〜28°</b> を適正範囲としています。<br><br>
-
-    <b>スマホ用の変更点</b><br>
-    画面幅に合わせて表示を自動調整します。ボタンとハンドルを大きくし、マウス操作ではなくPointer Eventsでタッチ操作に対応しています。<br><br>
-
-    <b>検出範囲</b><br>
-    針候補は、画面中央寄りの横幅範囲かつ皮膚基準線付近の帯状範囲に限定しています。腕や背景の直線を拾いにくくする目的です。<br><br>
-
-    <b>反転補正</b><br>
-    カメラ画像が左右反転して見える場合に備え、canvas描画側で左右反転補正しています。逆に反転してしまう場合は、JavaScript内の <code>const mirrorFix = true;</code> を <code>false</code> にしてください。<br><br>
-
-    <b>注意</b><br>
-    スマホではOpenCV.jsの処理が重くなるため、保存フレーム数は <code>150</code>、画像処理は2フレームに1回に軽量化しています。
   </details>
 
   <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
@@ -411,8 +332,8 @@
     let lastStatusValue = "";
     let lastStatusClassValue = "";
 
-    // スマホの背面カメラで左右が逆に見える場合は false に変更してください。
-    const mirrorFix = true;
+    // 背面カメラ使用を前提に左右反転補正は行わない。
+    const mirrorFix = false;
 
     // スマホ用に軽量化。重い場合は 100、余裕があれば 300 程度まで可。
     const maxBufferFrames = 150;
@@ -775,7 +696,7 @@
     }
 
     async function toggleFullscreen() {
-      const target = document.documentElement;
+      const target = document.getElementById("appShell") || document.documentElement;
       try {
         if (!document.fullscreenElement) {
           await target.requestFullscreen();
@@ -933,7 +854,7 @@
       if (bestLine && angleValue !== null) {
         drawNeedleLine(bestLine);
         angleText.textContent = angleValue.toFixed(1) + "°";
-        drawAngleTextOnCanvas(angleValue);
+        drawAngleTextOnCanvas(angleValue, bestLine);
         statusText.textContent = statusValue;
         statusText.className = statusClassValue;
       } else {
@@ -1070,13 +991,6 @@
       drawHandle(skinP1.x, skinP1.y, "L");
       drawHandle(skinP2.x, skinP2.y, "R");
 
-      ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
-      ctx.fillRect(14, Math.max(8, Math.min(skinP1.y, skinP2.y) - 50), 174, 34);
-      ctx.fillStyle = "lime";
-      ctx.font = "bold 20px sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillText("Skin reference", 24, Math.max(25, Math.min(skinP1.y, skinP2.y) - 33));
 
       ctx.restore();
     }
@@ -1127,26 +1041,115 @@
       ctx.restore();
     }
 
-    function drawAngleTextOnCanvas(angle) {
+    function drawAngleTextOnCanvas(angle, line = null) {
       ctx.save();
-      const boxWidth = 280;
-      const boxHeight = 64;
-      const x = (canvasW - boxWidth) / 2;
-      const y = 16;
 
-      ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
-      roundRect(ctx, x, y, boxWidth, boxHeight, 10, true, false);
+      const label = `${angle.toFixed(1)}°`;
+      const boxWidth = 132;
+      const boxHeight = 54;
 
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      let center = { x: canvasW * 0.50, y: canvasH * 0.28 };
+      let pointer = null;
+
+      if (line) {
+        const hit = getLineIntersection(
+          { x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2 },
+          { x1: skinP1.x, y1: skinP1.y, x2: skinP2.x, y2: skinP2.y }
+        );
+
+        if (hit && hit.x >= -canvasW && hit.x <= canvasW * 2 && hit.y >= -canvasH && hit.y <= canvasH * 2) {
+          pointer = hit;
+        } else {
+          pointer = {
+            x: (line.x1 + line.x2) / 2,
+            y: (line.y1 + line.y2) / 2
+          };
+        }
+
+        const skinUnit = getUnitVector(skinP1.x, skinP1.y, skinP2.x, skinP2.y);
+        let needleUnit = getUnitVector(line.x1, line.y1, line.x2, line.y2);
+
+        // 鋭角側をそろえたうえで、鈍角側の二等分線方向を候補にする
+        if (dot(skinUnit, needleUnit) < 0) {
+          needleUnit = { x: -needleUnit.x, y: -needleUnit.y };
+        }
+
+        let obtuseDir = normalizeVector({
+          x: skinUnit.x - needleUnit.x,
+          y: skinUnit.y - needleUnit.y
+        });
+
+        if (!isFinite(obtuseDir.x) || !isFinite(obtuseDir.y)) {
+          obtuseDir = { x: -needleUnit.y, y: needleUnit.x };
+        }
+
+        // 「斜め上」を優先。候補が下向きなら反転する。
+        if (obtuseDir.y > 0) {
+          obtuseDir = { x: -obtuseDir.x, y: -obtuseDir.y };
+        }
+
+        center = {
+          x: pointer.x + obtuseDir.x * 96,
+          y: pointer.y + obtuseDir.y * 76
+        };
+
+        center.x = clamp(center.x, boxWidth / 2 + 8, canvasW - boxWidth / 2 - 8);
+        center.y = clamp(center.y, boxHeight / 2 + 92, canvasH - boxHeight / 2 - 18);
+      }
+
+      const x = center.x - boxWidth / 2;
+      const y = center.y - boxHeight / 2;
+
+      if (pointer) {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pointer.x, pointer.y);
+        ctx.lineTo(center.x, center.y + boxHeight / 2);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.76)";
+      roundRect(ctx, x, y, boxWidth, boxHeight, 12, true, false);
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
       ctx.lineWidth = 2;
-      roundRect(ctx, x, y, boxWidth, boxHeight, 10, false, true);
+      roundRect(ctx, x, y, boxWidth, boxHeight, 12, false, true);
 
       ctx.fillStyle = "#ffffff";
       ctx.font = "bold 34px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(`Angle: ${angle.toFixed(1)}°`, canvasW / 2, y + boxHeight / 2);
+      ctx.fillText(label, center.x, center.y);
       ctx.restore();
+    }
+
+    function getLineIntersection(a, b) {
+      const x1 = a.x1, y1 = a.y1, x2 = a.x2, y2 = a.y2;
+      const x3 = b.x1, y3 = b.y1, x4 = b.x2, y4 = b.y2;
+      const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(den) < 0.0001) return null;
+      return {
+        x: ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den,
+        y: ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den
+      };
+    }
+
+    function getUnitVector(x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      return { x: dx / len, y: dy / len };
+    }
+
+    function dot(a, b) {
+      return a.x * b.x + a.y * b.y;
+    }
+
+    function normalizeVector(v) {
+      const len = Math.sqrt(v.x * v.x + v.y * v.y);
+      if (len < 0.0001) return { x: 0, y: -1 };
+      return { x: v.x / len, y: v.y / len };
     }
 
     function roundRect(context, x, y, width, height, radius, fill, stroke) {
