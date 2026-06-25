@@ -441,7 +441,7 @@
         <div id="status">OpenCV.js読み込み中</div>
         <div id="reachInfo">推定到達距離：深さを入力してください</div>
         <div id="orientationHint">カメラ開始時に横画面ロックを試行します</div>
-        <div id="frameInfo">保存フレーム：0 / 60</div>
+        <div id="frameInfo">保存フレーム：0 / 360</div>
         <div id="skinInfo">皮膚基準線：未設定</div>
       </div>
     </div>
@@ -449,7 +449,7 @@
 
   <details class="note">
     <summary>使い方・設定</summary>
-    発熱対策として、カメラ15fps、OpenCV処理5フレームに1回、保存フレーム60枚に軽量化しています。血管深さをmmで入力すると、現在の刺入角から針先が血管深さに到達するまでの推定進行距離を計算します。計算式は「推定到達距離 = 血管深さ ÷ sin(刺入角)」です。
+    発熱対策として、カメラ15fps、OpenCV処理5フレームに1回、保存フレーム360枚に軽量化しています。血管深さをmmで入力すると、現在の刺入角から針先が血管深さに到達するまでの推定進行距離を計算します。計算式は「推定到達距離 = 血管深さ ÷ sin(刺入角)」です。
   </details>
 
   <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
@@ -485,7 +485,7 @@
     const mirrorFix = false;
 
     // スマホ用に軽量化。重い場合は 100、余裕があれば 300 程度まで可。
-    const maxBufferFrames = 60;
+    const maxBufferFrames = 360;
     let frameBuffer = [];
     let reviewIndex = -1;
 
