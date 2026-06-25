@@ -82,9 +82,9 @@
       top: max(6px, env(safe-area-inset-top));
       left: max(8px, env(safe-area-inset-left));
       right: max(8px, env(safe-area-inset-right));
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       padding: 0;
       background: transparent;
     }
@@ -94,6 +94,7 @@
       gap: 8px;
       justify-content: flex-start;
       align-items: center;
+      flex: 0 0 auto;
       flex-wrap: nowrap;
     }
 
@@ -145,27 +146,33 @@
     }
 
     .sliderBox {
+      height: 58px;
+      min-width: 190px;
+      max-width: 300px;
+      flex: 1 1 220px;
       display: grid;
       grid-template-columns: auto 1fr;
       align-items: center;
       gap: 8px;
       color: var(--muted);
-      font-size: clamp(10px, 1.8vw, 12px);
-      font-weight: 700;
-      padding: 6px 10px;
-      border-radius: 12px;
+      font-size: clamp(10px, 1.5vw, 12px);
+      font-weight: 800;
+      padding: 0 10px;
+      border-radius: 14px;
       background: rgba(0, 0, 0, 0.42);
+      border: 1px solid rgba(255,255,255,0.16);
       backdrop-filter: blur(5px);
       -webkit-backdrop-filter: blur(5px);
     }
 
     .sliderLabel {
       white-space: nowrap;
+      line-height: 1;
     }
 
     #frameSlider {
       width: 100%;
-      height: 22px;
+      height: 26px;
       cursor: pointer;
     }
 
@@ -175,29 +182,33 @@
     }
 
     .depthBox {
+      height: 58px;
+      min-width: 300px;
+      flex: 1.15 1 320px;
       display: grid;
-      grid-template-columns: auto minmax(68px, 86px) auto 1fr;
+      grid-template-columns: auto minmax(58px, 76px) auto minmax(130px, 1fr);
       align-items: center;
       gap: 8px;
       color: #fff;
-      font-size: clamp(10px, 1.8vw, 12px);
+      font-size: clamp(10px, 1.5vw, 12px);
       font-weight: 800;
-      padding: 6px 10px;
-      border-radius: 12px;
+      padding: 0 10px;
+      border-radius: 14px;
       background: rgba(0, 0, 0, 0.42);
+      border: 1px solid rgba(255,255,255,0.16);
       backdrop-filter: blur(5px);
       -webkit-backdrop-filter: blur(5px);
     }
 
     #depthInput {
       width: 100%;
-      min-height: 28px;
+      min-height: 34px;
       border: 1px solid rgba(255,255,255,0.32);
-      border-radius: 8px;
+      border-radius: 9px;
       padding: 3px 8px;
       background: rgba(255,255,255,0.92);
       color: #111827;
-      font-size: clamp(13px, 2.2vw, 16px);
+      font-size: clamp(14px, 2vw, 17px);
       font-weight: 900;
       text-align: center;
     }
@@ -293,7 +304,13 @@
       display: none;
     }
 
-    @media (orientation: portrait) {
+    @media (orientation: portrait), (max-width: 900px) {
+      .topOverlay {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
       .buttonRow {
         gap: 6px;
       }
@@ -303,10 +320,16 @@
         min-height: 52px;
       }
 
-      .sliderBox,
+      .sliderBox {
+        height: 52px;
+        min-width: 170px;
+        flex: 1 1 180px;
+      }
+
       .depthBox {
-        grid-template-columns: 1fr;
-        gap: 4px;
+        height: 52px;
+        min-width: 250px;
+        flex: 1 1 260px;
       }
 
       #infoPanel {
@@ -357,7 +380,7 @@
         </div>
 
         <div class="depthBox">
-          <label for="depthInput">血管深さ</label>
+          <label for="depthInput">深さ</label>
           <input
             type="number"
             id="depthInput"
