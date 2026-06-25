@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>穿刺針 刺入角 自動測定アプリ</title>
 
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="刺入角測定" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
   <style>
     :root {
       --primary: #1f6feb;
@@ -31,6 +39,16 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", "Meiryo", sans-serif;
       overscroll-behavior: none;
       touch-action: none;
+    }
+
+
+    @media all and (display-mode: standalone) {
+      html, body, #appShell {
+        width: 100vw;
+        height: 100dvh;
+        overflow: hidden;
+        background: #000;
+      }
     }
 
     html:fullscreen,
@@ -1451,5 +1469,16 @@
     updateSkinInfo();
     updateReachDisplay(null);
   </script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function() {
+        navigator.serviceWorker.register("./sw.js").catch(function(err) {
+          console.warn("Service worker registration failed:", err);
+        });
+      });
+    }
+  </script>
+
 </body>
 </html>
