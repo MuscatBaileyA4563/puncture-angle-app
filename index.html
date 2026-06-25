@@ -33,6 +33,14 @@
       touch-action: none;
     }
 
+    html:fullscreen,
+    body:fullscreen,
+    #appShell:fullscreen {
+      width: 100vw;
+      height: 100dvh;
+      background: #000;
+    }
+
     body {
       display: block;
     }
@@ -223,22 +231,21 @@
     #infoPanel {
       position: absolute;
       z-index: 4;
-      left: max(8px, env(safe-area-inset-left));
-      right: max(8px, env(safe-area-inset-right));
-      bottom: max(6px, env(safe-area-inset-bottom));
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: clamp(58px, 12.5dvh, 86px);
       display: grid;
-      grid-template-columns: auto 1fr;
+      grid-template-columns: minmax(190px, 1fr) minmax(260px, 1.15fr) minmax(250px, 1fr);
       grid-template-areas:
-        "angle status"
-        "reach reach"
-        "frame skin";
-      gap: 2px 8px;
+        "angle reach status"
+        "frame reach skin";
+      column-gap: 18px;
+      row-gap: 4px;
       align-items: center;
-      padding: 5px 8px;
-      border-radius: 12px;
-      background: rgba(0, 0, 0, 0.30);
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
+      padding: 8px max(16px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      border-radius: 0;
+      background: rgba(0, 0, 0, 0.88);
       color: #fff;
       text-align: left;
       pointer-events: none;
@@ -246,50 +253,61 @@
 
     #angleWrap {
       grid-area: angle;
-      font-size: clamp(11px, 1.8vw, 14px);
-      font-weight: 800;
+      align-self: end;
+      font-size: clamp(14px, 2.1vw, 19px);
+      font-weight: 900;
       white-space: nowrap;
       line-height: 1.05;
     }
 
     #angle {
       color: #ffffff;
-      font-size: clamp(18px, 3vw, 26px);
+      font-size: clamp(24px, 4.3vw, 40px);
       letter-spacing: -0.03em;
     }
 
     #status {
       grid-area: status;
-      font-size: clamp(11px, 2vw, 15px);
+      align-self: end;
+      font-size: clamp(14px, 2.1vw, 19px);
       font-weight: 900;
-      line-height: 1.15;
+      line-height: 1.1;
       text-align: right;
+      white-space: nowrap;
     }
 
     #frameInfo {
       grid-area: frame;
+      align-self: start;
+      text-align: left;
     }
 
     #reachInfo {
       grid-area: reach;
       color: #ffffff;
-      font-size: clamp(11px, 1.9vw, 14px);
+      font-size: clamp(14px, 2.2vw, 20px);
       font-weight: 900;
-      line-height: 1.1;
+      line-height: 1.2;
       text-align: center;
+      align-self: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     #skinInfo {
       grid-area: skin;
+      align-self: start;
       text-align: right;
+      white-space: nowrap;
     }
 
     #frameInfo,
     #skinInfo,
     #orientationHint {
-      color: var(--muted);
-      font-size: clamp(9px, 1.5vw, 11px);
-      line-height: 1.1;
+      color: rgba(255,255,255,0.78);
+      font-size: clamp(10px, 1.6vw, 13px);
+      line-height: 1.15;
     }
 
     #orientationHint {
@@ -332,20 +350,25 @@
         flex: 1 1 260px;
       }
 
-      #infoPanel {
-        grid-template-columns: 1fr;
-        grid-template-areas:
-          "angle"
-          "status"
-          "reach"
-          "frame"
-          "skin";
-        text-align: center;
-      }
+      @media (orientation: portrait) {
+        #infoPanel {
+          height: auto;
+          min-height: 96px;
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            "angle"
+            "status"
+            "reach"
+            "frame"
+            "skin";
+          text-align: center;
+        }
 
-      #status,
-      #skinInfo {
-        text-align: center;
+        #status,
+        #skinInfo,
+        #frameInfo {
+          text-align: center;
+        }
       }
     }
   </style>
@@ -398,7 +421,7 @@
       <div id="infoPanel">
         <div id="angleWrap">刺入角：<span id="angle">--.-°</span></div>
         <div id="status">OpenCV.js読み込み中</div>
-        <div id="reachInfo">到達距離：深さ入力で自動計算</div>
+        <div id="reachInfo">推定到達距離：深さを入力してください</div>
         <div id="orientationHint">カメラ開始時に横画面ロックを試行します</div>
         <div id="frameInfo">保存フレーム：0 / 150</div>
         <div id="skinInfo">皮膚基準線：未設定</div>
@@ -677,10 +700,11 @@
     async function requestLandscapeMode() {
       const target = document.getElementById("appShell") || document.documentElement;
 
-      // Android Chromeでは、画面向きロックは全画面中かつユーザー操作内で成功しやすい。
+      // Android Chromeでは、画面向きロックは全画面中に成功しやすい。
+      // カメラ許可ダイアログ後に全画面が解除されることがあるため、複数回呼び出す。
       try {
         if (!document.fullscreenElement && target.requestFullscreen) {
-          await target.requestFullscreen();
+          await target.requestFullscreen({ navigationUI: "hide" });
         }
       } catch (e) {
         console.warn("Fullscreen request failed:", e);
@@ -696,6 +720,20 @@
 
       updateOrientationHint();
     }
+
+    function scheduleFullscreenRetry() {
+      // 権限許可後やvideo.play後にURLバーが戻る端末向けの再試行。
+      // ユーザー操作扱いが残っていれば自動で全画面へ戻る。
+      setTimeout(() => requestLandscapeMode(), 150);
+      setTimeout(() => requestLandscapeMode(), 600);
+      setTimeout(() => requestLandscapeMode(), 1200);
+    }
+
+    document.addEventListener("fullscreenchange", function() {
+      if (processing && !document.fullscreenElement) {
+        scheduleFullscreenRetry();
+      }
+    });
 
     // ------------------------------
     // カメラ制御
@@ -727,7 +765,14 @@
         });
 
         video.srcObject = stream;
+
+        // カメラ許可後に全画面が解除される端末があるため、再度全画面化を試行。
+        await requestLandscapeMode();
+
         await video.play();
+
+        // 再生開始直後にもURLバーが戻ることがあるため追加で再試行。
+        scheduleFullscreenRetry();
 
         frameBuffer = [];
         reviewIndex = -1;
@@ -849,17 +894,15 @@
       try {
         if (!document.fullscreenElement) {
           await requestLandscapeMode();
+          scheduleFullscreenRetry();
         } else {
-          if (screen.orientation && screen.orientation.unlock) {
-            try { screen.orientation.unlock(); } catch (e) {}
-          }
           await document.exitFullscreen();
-          updateOrientationHint();
         }
       } catch (e) {
-        alert("このブラウザでは全画面・横向き固定にできませんでした。端末を横向きにして使用してください。");
+        alert("このブラウザでは全画面表示にできませんでした。端末を横向きにしてから再度試してください。");
       }
     }
+
 
     function drawCameraFrame() {
       ctx.save();
