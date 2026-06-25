@@ -274,7 +274,7 @@
           <button type="button" onclick="startCamera()">カメラ開始</button>
           <button type="button" id="pauseBtn" onclick="togglePause()">一時停止</button>
           <button type="button" id="stopBtn" onclick="stopCamera()">停止</button>
-          <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()">全画面</button>
+          <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()">全画面/横向き</button>
         </div>
 
         <div class="sliderBox">
@@ -295,7 +295,7 @@
       <div id="infoPanel">
         <div id="angleWrap">刺入角：<span id="angle">--.-°</span></div>
         <div id="status">OpenCV.js読み込み中</div>
-        <div id="orientationHint">横向き＋全画面表示推奨</div>
+        <div id="orientationHint">カメラ開始時に横画面ロックを試行します</div>
         <div id="frameInfo">保存フレーム：0 / 150</div>
         <div id="skinInfo">皮膚基準線：未設定</div>
       </div>
@@ -365,6 +365,10 @@
     // スマホ負荷対策。2なら2フレームに1回だけOpenCV処理。
     const processEveryNFrames = 2;
 
+    // 認識する刺入角の範囲。急角度の穿刺も拾えるように75°まで許容。
+    const minNeedleAngle = 5;
+    const maxNeedleAngle = 75;
+
     function waitForOpenCV() {
       if (window.cv && cv.Mat) {
         cvReady = true;
@@ -386,7 +390,7 @@
     function updateOrientationHint() {
       const isPortrait = window.innerHeight > window.innerWidth;
       orientationHint.textContent = isPortrait
-        ? "縦向きでは画面が狭いため、横向き＋全画面表示がおすすめです"
+        ? "縦向きです：カメラ開始または全画面/横向きで横画面ロックを試行します"
         : "横向き表示中：皮膚線ハンドルを指で調整できます";
     }
 
@@ -552,6 +556,32 @@
     }
 
     // ------------------------------
+    // 横画面・全画面制御
+    // ------------------------------
+    async function requestLandscapeMode() {
+      const target = document.getElementById("appShell") || document.documentElement;
+
+      // Android Chromeでは、画面向きロックは全画面中かつユーザー操作内で成功しやすい。
+      try {
+        if (!document.fullscreenElement && target.requestFullscreen) {
+          await target.requestFullscreen();
+        }
+      } catch (e) {
+        console.warn("Fullscreen request failed:", e);
+      }
+
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          await screen.orientation.lock("landscape");
+        }
+      } catch (e) {
+        console.warn("Landscape lock failed:", e);
+      }
+
+      updateOrientationHint();
+    }
+
+    // ------------------------------
     // カメラ制御
     // ------------------------------
     async function startCamera() {
@@ -566,6 +596,8 @@
       }
 
       if (processing) return;
+
+      await requestLandscapeMode();
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -696,15 +728,18 @@
     }
 
     async function toggleFullscreen() {
-      const target = document.getElementById("appShell") || document.documentElement;
       try {
         if (!document.fullscreenElement) {
-          await target.requestFullscreen();
+          await requestLandscapeMode();
         } else {
+          if (screen.orientation && screen.orientation.unlock) {
+            try { screen.orientation.unlock(); } catch (e) {}
+          }
           await document.exitFullscreen();
+          updateOrientationHint();
         }
       } catch (e) {
-        alert("このブラウザでは全画面表示にできませんでした。ブラウザのメニューから全画面表示を試してください。");
+        alert("このブラウザでは全画面・横向き固定にできませんでした。端末を横向きにして使用してください。");
       }
     }
 
@@ -794,8 +829,8 @@
           const candidateLine = { x1, y1, x2, y2 };
           const insertionAngle = calcInsertionAngle(candidateLine);
 
-          // 穿刺角として現実的な候補範囲
-          if (insertionAngle < 15 || insertionAngle > 40) continue;
+          // 穿刺角として現実的な候補範囲。急角度の穿刺も75°まで認識する。
+          if (insertionAngle < minNeedleAngle || insertionAngle > maxNeedleAngle) continue;
 
           // 長さを主評価、皮膚基準線に近いものを副評価
           const score = length - distToSkin * 0.7;
