@@ -506,7 +506,9 @@
     const lineHitTolerance = 34;
 
     // 皮膚基準線付近の検出幅
-    const detectionBandHalfWidth = canvasH / 12;
+    // 針は皮膚線の上側に写ることが多いため、上側だけ広めに検出する。
+    const detectionBandUpperWidth = canvasH / 5;   // 皮膚線より上側：約108px
+    const detectionBandLowerWidth = canvasH / 12;  // 皮膚線より下側：約45px
 
     // 横幅の中央のみを針候補にする。0.70 = 中央70%。誤検出が多ければ 0.60 にする。
     const centerRoiRate = 0.70;
@@ -705,6 +707,20 @@
       const denominator = Math.sqrt(abx * abx + aby * aby);
       if (denominator === 0) return 99999;
       return numerator / denominator;
+    }
+
+    function signedVerticalDistanceToSkin(p, a, b) {
+      // p.x位置における皮膚基準線のY座標との差を返す。
+      // 返り値がマイナスなら皮膚線より画面上側、プラスなら画面下側。
+      const dx = b.x - a.x;
+
+      if (Math.abs(dx) < 0.001) {
+        return p.y - a.y;
+      }
+
+      const slope = (b.y - a.y) / dx;
+      const skinYAtX = a.y + slope * (p.x - a.x);
+      return p.y - skinYAtX;
     }
 
     function updateSkinInfo() {
@@ -1002,8 +1018,17 @@
           if (mid.x < roi.left || mid.x > roi.right) continue;
 
           // 皮膚基準線付近の帯状範囲だけを候補にする
-          const distToSkin = distancePointToInfiniteLine(mid, skinP1, skinP2);
-          if (distToSkin > detectionBandHalfWidth) continue;
+          // 皮膚線より上側は広く、下側は狭くする。
+          const signedDistToSkin = signedVerticalDistanceToSkin(mid, skinP1, skinP2);
+          const distToSkin = Math.abs(signedDistToSkin);
+
+          if (signedDistToSkin < 0) {
+            // 画面上側：針が存在しやすいため広く許容
+            if (distToSkin > detectionBandUpperWidth) continue;
+          } else {
+            // 画面下側：背景誤検出を避けるため従来程度に制限
+            if (distToSkin > detectionBandLowerWidth) continue;
+          }
 
           const candidateLine = { x1, y1, x2, y2 };
           const insertionAngle = calcInsertionAngle(candidateLine);
