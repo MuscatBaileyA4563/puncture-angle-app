@@ -171,9 +171,16 @@
 
     .depthBox {
       flex: 2 1 350px;
+      height: 64px;
+      min-height: 64px;
       color: #fff;
       font-size: 14px;
       font-weight: 700;
+    }
+
+    #depthSlider {
+      height: 64px;
+      cursor: pointer;
     }
 
     /* 下部情報パネル */
@@ -312,6 +319,11 @@
       .topOverlay { gap: 8px; }
       .ui-box { height: 54px; padding: 0 12px; }
       button { min-width: 54px; min-height: 54px; }
+      .depthBox {
+        height: 54px;
+        min-height: 54px;
+      }
+      #depthSlider { height: 54px; }
       #depthLabel { font-size: 16px; }
 
       #infoPanel {
