@@ -146,6 +146,8 @@
     #pauseBtn { background: rgba(245, 158, 11, 0.75); border-color: rgba(251, 191, 36, 0.5); }
     #stopBtn { background: rgba(220, 38, 38, 0.75); border-color: rgba(248, 113, 113, 0.5); }
     #fullscreenBtn { background: rgba(51, 65, 85, 0.75); }
+    #skinModeBtn { background: rgba(16, 185, 129, 0.72); border-color: rgba(74, 222, 128, 0.45); }
+    #skinModeBtn.auto { background: rgba(37, 99, 235, 0.78); border-color: rgba(138, 180, 248, 0.65); }
 
     .ui-box {
       height: 64px;
@@ -291,19 +293,6 @@
     }
 
     /* 針先のフローティングラベル */
-    #skinSampleMarker {
-      position: absolute;
-      z-index: 7;
-      width: 44px;
-      height: 44px;
-      border: 3px solid #fbbf24;
-      border-radius: 999px;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      display: none;
-      box-shadow: 0 0 0 3px rgba(0,0,0,0.45), 0 0 16px rgba(251,191,36,0.9);
-    }
-
     #floatingAngleLabel {
       position: absolute;
       z-index: 6;
@@ -392,7 +381,6 @@
     <div id="container">
       <video id="video" autoplay playsinline muted></video>
       <canvas id="canvas" width="960" height="540"></canvas>
-      <div id="skinSampleMarker"></div>
 
       <div id="floatingAngleLabel">
         <div id="f-angle">--.-°</div>
@@ -416,6 +404,10 @@
           <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()" aria-label="全画面">
             <span class="material-symbols-rounded btnIcon">fullscreen</span>
             <span class="btnText">全画面</span>
+          </button>
+          <button type="button" id="skinModeBtn" onclick="toggleSkinAutoMode()" aria-label="皮膚線モード">
+            <span class="material-symbols-rounded btnIcon">timeline</span>
+            <span class="btnText">皮膚線:手動</span>
           </button>
         </div>
 
@@ -472,6 +464,7 @@
     const statusText = document.getElementById("status");
     const reachInfo = document.getElementById("reachInfo");
     const pauseBtn = document.getElementById("pauseBtn");
+    const skinModeBtn = document.getElementById("skinModeBtn");
     const frameSlider = document.getElementById("frameSlider");
     
     const depthSlider = document.getElementById("depthSlider");
@@ -501,6 +494,14 @@
     let skinP1 = { x: canvasW * 0.16, y: canvasH * 0.65 };
     let skinP2 = { x: canvasW * 0.84, y: canvasH * 0.65 };
 
+    let skinAutoMode = false;
+    let autoSkinCandidate = null;
+    let autoSkinFoundFrame = 0;
+    const autoSkinSearchBandPx = 70;
+    const autoSkinAngleTolerance = 12;
+    const autoSkinMinLength = canvasW * 0.18;
+    const autoSkinSmoothing = 0.18;
+
     let draggingMode = null;
     let lastDragPos = null;
 
@@ -514,23 +515,8 @@
     const centerRoiRate = 0.75;
     const processEveryNFrames = 2;
 
-    const minNeedleAngle = 1;
+    const minNeedleAngle = 5;
     const maxNeedleAngle = 75;
-
-    let skinColorFilterEnabled = false;
-    let sampledSkinHsv = null;
-    let sampledSkinRgb = null;
-    let skinLongPressTimer = null;
-    let skinLongPressPos = null;
-    let skinLongPressTriggered = false;
-    const skinLongPressMs = 650;
-    const skinSampleRadiusPx = 12;
-    const skinHueTolerance = 14;
-    const skinSaturationTolerance = 70;
-    const skinValueTolerance = 90;
-    const skinColorRejectRatio = 0.55;
-    const skinParallelRejectAngle = 6;
-    const skinRejectDistancePx = 36;
 
     function waitForOpenCV() {
       if (window.cv && cv.Mat) {
@@ -543,6 +529,7 @@
     }
     waitForOpenCV();
     setPauseButtonState(false);
+    updateSkinModeButton();
 
     window.addEventListener("resize", function() {
       if (paused && reviewIndex >= 0 && frameBuffer[reviewIndex]) {
@@ -563,201 +550,129 @@
       statusText.className = className;
     }
 
+    function toggleSkinAutoMode() {
+      skinAutoMode = !skinAutoMode;
+      autoSkinCandidate = null;
+      autoSkinFoundFrame = 0;
+      updateSkinModeButton();
+      updateStatusWithSparkle(skinAutoMode ? "皮膚線：自動補正" : "皮膚線：手動", "");
+      if (paused && reviewIndex >= 0 && frameBuffer.length > 0) {
+        showBufferedFrame(reviewIndex);
+      }
+    }
+
+    function updateSkinModeButton() {
+      if (!skinModeBtn) return;
+      skinModeBtn.classList.toggle("auto", skinAutoMode);
+      skinModeBtn.innerHTML = skinAutoMode
+        ? '<span class="material-symbols-rounded btnIcon">auto_fix_high</span><span class="btnText">皮膚線:自動</span>'
+        : '<span class="material-symbols-rounded btnIcon">timeline</span><span class="btnText">皮膚線:手動</span>';
+      skinModeBtn.setAttribute("aria-label", skinAutoMode ? "皮膚線 自動補正" : "皮膚線 手動");
+    }
+
+    function updateAutoSkinLineFromHough(lines) {
+      if (!skinAutoMode || draggingMode || !lines || lines.rows <= 0) return false;
+
+      const skinAngle = getLineAngleDeg(skinP1, skinP2);
+      const roi = getCenterRoi();
+      const centerX = canvasW / 2;
+      let best = null;
+      let bestScore = -Infinity;
+
+      for (let i = 0; i < lines.rows; i++) {
+        const x1 = lines.data32S[i * 4];
+        const y1 = lines.data32S[i * 4 + 1];
+        const x2 = lines.data32S[i * 4 + 2];
+        const y2 = lines.data32S[i * 4 + 3];
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        if (length < autoSkinMinLength) continue;
+        if (Math.abs(dx) < 30) continue;
+
+        const mid = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+        if (mid.x < roi.left - 40 || mid.x > roi.right + 40) continue;
+
+        const lineAngle = getLineAngleDegFromCoords(x1, y1, x2, y2);
+        const angleDiff = angleDifferenceAbs(lineAngle, skinAngle);
+        if (angleDiff > autoSkinAngleTolerance) continue;
+
+        const signedDist = signedVerticalDistanceToSkin(mid, skinP1, skinP2);
+        const dist = Math.abs(signedDist);
+        if (dist > autoSkinSearchBandPx) continue;
+
+        const yAtLeft = getYOnLineAtX(x1, y1, x2, y2, skinP1.x);
+        const yAtRight = getYOnLineAtX(x1, y1, x2, y2, skinP2.x);
+        if (!Number.isFinite(yAtLeft) || !Number.isFinite(yAtRight)) continue;
+        if (yAtLeft < 25 || yAtLeft > canvasH - 25 || yAtRight < 25 || yAtRight > canvasH - 25) continue;
+
+        const centerPenalty = Math.abs(mid.x - centerX) / centerX;
+        const score = length * 1.25 - dist * 2.2 - angleDiff * 10 - centerPenalty * 55;
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x1, y1, x2, y2, yAtLeft, yAtRight, length, dist, angleDiff };
+        }
+      }
+
+      if (!best) {
+        autoSkinCandidate = null;
+        return false;
+      }
+
+      autoSkinCandidate = best;
+      autoSkinFoundFrame = frameCount;
+
+      const targetP1 = { x: skinP1.x, y: clamp(best.yAtLeft, 25, canvasH - 25) };
+      const targetP2 = { x: skinP2.x, y: clamp(best.yAtRight, 25, canvasH - 25) };
+      const alpha = autoSkinSmoothing;
+
+      skinP1.y = skinP1.y * (1 - alpha) + targetP1.y * alpha;
+      skinP2.y = skinP2.y * (1 - alpha) + targetP2.y * alpha;
+
+      return true;
+    }
+
+    function getYOnLineAtX(x1, y1, x2, y2, x) {
+      const dx = x2 - x1;
+      if (Math.abs(dx) < 0.001) return NaN;
+      const t = (x - x1) / dx;
+      return y1 + (y2 - y1) * t;
+    }
+
+    function angleDifferenceAbs(a, b) {
+      let diff = Math.abs(normalizeAngle180(a - b));
+      if (diff > 90) diff = 180 - diff;
+      return diff;
+    }
+
     canvas.addEventListener("pointerdown", function(e) {
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
       const pos = getCanvasPosition(e);
-      skinLongPressTriggered = false;
       startSkinDrag(pos);
-      if (!draggingMode) {
-        startSkinColorLongPress(pos);
+      if (draggingMode && skinAutoMode) {
+        skinAutoMode = false;
+        autoSkinCandidate = null;
+        updateSkinModeButton();
+        updateStatusWithSparkle("皮膚線：手動", "");
       }
     });
 
     canvas.addEventListener("pointermove", function(e) {
       e.preventDefault();
       const pos = getCanvasPosition(e);
-      if (draggingMode) {
-        cancelSkinColorLongPress();
-        moveSkinDrag(pos);
-      } else {
-        if (skinLongPressPos && distance(pos, skinLongPressPos) > 18) cancelSkinColorLongPress();
-        updateCursor(pos);
-      }
+      if (draggingMode) { moveSkinDrag(pos); } else { updateCursor(pos); }
     });
 
     canvas.addEventListener("pointerup", function(e) {
-      e.preventDefault();
-      cancelSkinColorLongPress();
-      endSkinDrag();
+      e.preventDefault(); endSkinDrag();
     });
 
     canvas.addEventListener("pointercancel", function(e) {
-      e.preventDefault();
-      cancelSkinColorLongPress();
-      endSkinDrag();
+      e.preventDefault(); endSkinDrag();
     });
-
-
-    function startSkinColorLongPress(pos) {
-      cancelSkinColorLongPress();
-      skinLongPressPos = pos;
-      skinLongPressTimer = setTimeout(function() {
-        skinLongPressTriggered = true;
-        sampleSkinColorAt(pos);
-      }, skinLongPressMs);
-    }
-
-    function cancelSkinColorLongPress() {
-      if (skinLongPressTimer) {
-        clearTimeout(skinLongPressTimer);
-        skinLongPressTimer = null;
-      }
-      skinLongPressPos = null;
-    }
-
-    function sampleSkinColorAt(pos) {
-      if (!processing && frameBuffer.length <= 0) {
-        updateStatusWithSparkle("カメラ開始後に肌を長押し", "warn");
-        return;
-      }
-
-      if (!paused && video.readyState >= 2) {
-        captureVideoToHidden();
-      }
-
-      const r = skinSampleRadiusPx;
-      const sx = clamp(Math.round(pos.x - r), 0, canvasW - 1);
-      const sy = clamp(Math.round(pos.y - r), 0, canvasH - 1);
-      const sw = clamp(Math.round(r * 2), 1, canvasW - sx);
-      const sh = clamp(Math.round(r * 2), 1, canvasH - sy);
-      const imageData = hiddenCtx.getImageData(sx, sy, sw, sh).data;
-
-      let totalR = 0, totalG = 0, totalB = 0, count = 0;
-      for (let i = 0; i < imageData.length; i += 4) {
-        totalR += imageData[i];
-        totalG += imageData[i + 1];
-        totalB += imageData[i + 2];
-        count++;
-      }
-
-      if (count <= 0) return;
-
-      sampledSkinRgb = {
-        r: Math.round(totalR / count),
-        g: Math.round(totalG / count),
-        b: Math.round(totalB / count)
-      };
-      sampledSkinHsv = rgbToOpenCvHsv(sampledSkinRgb.r, sampledSkinRgb.g, sampledSkinRgb.b);
-      skinColorFilterEnabled = true;
-      showSkinSampleMarker(pos);
-      updateStatusWithSparkle("肌色除外ON", "ok");
-    }
-
-    function showSkinSampleMarker(pos) {
-      const marker = document.getElementById("skinSampleMarker");
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = rect.width / canvasW;
-      const scaleY = rect.height / canvasH;
-      marker.style.left = (pos.x * scaleX) + "px";
-      marker.style.top = (pos.y * scaleY) + "px";
-      marker.style.display = "block";
-      setTimeout(function() { marker.style.display = "none"; }, 900);
-    }
-
-    function rgbToOpenCvHsv(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const d = max - min;
-      let h = 0;
-      if (d !== 0) {
-        if (max === r) h = ((g - b) / d) % 6;
-        else if (max === g) h = (b - r) / d + 2;
-        else h = (r - g) / d + 4;
-        h *= 60;
-        if (h < 0) h += 360;
-      }
-      const s = max === 0 ? 0 : d / max;
-      return { h: Math.round(h / 2), s: Math.round(s * 255), v: Math.round(max * 255) };
-    }
-
-    function createAdaptiveSkinMask(src) {
-      if (!skinColorFilterEnabled || !sampledSkinHsv) return null;
-
-      const rgb = new cv.Mat();
-      const hsv = new cv.Mat();
-      const mask = new cv.Mat();
-      const h = sampledSkinHsv.h;
-      const s = sampledSkinHsv.s;
-      const v = sampledSkinHsv.v;
-      const sLow = clamp(s - skinSaturationTolerance, 20, 255);
-      const sHigh = clamp(s + skinSaturationTolerance, 0, 255);
-      const vLow = clamp(v - skinValueTolerance, 25, 255);
-      const vHigh = clamp(v + skinValueTolerance, 0, 255);
-      const hLow = h - skinHueTolerance;
-      const hHigh = h + skinHueTolerance;
-
-      cv.cvtColor(src, rgb, cv.COLOR_RGBA2RGB);
-      cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
-
-      let lower1, upper1, lower2, upper2, mask2;
-      if (hLow < 0) {
-        lower1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, sLow, vLow, 0]);
-        upper1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [hHigh, sHigh, vHigh, 255]);
-        lower2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [180 + hLow, sLow, vLow, 0]);
-        upper2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, sHigh, vHigh, 255]);
-        mask2 = new cv.Mat();
-        cv.inRange(hsv, lower1, upper1, mask);
-        cv.inRange(hsv, lower2, upper2, mask2);
-        cv.bitwise_or(mask, mask2, mask);
-        lower2.delete(); upper2.delete(); mask2.delete();
-      } else if (hHigh > 179) {
-        lower1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [hLow, sLow, vLow, 0]);
-        upper1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, sHigh, vHigh, 255]);
-        lower2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, sLow, vLow, 0]);
-        upper2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [hHigh - 180, sHigh, vHigh, 255]);
-        mask2 = new cv.Mat();
-        cv.inRange(hsv, lower1, upper1, mask);
-        cv.inRange(hsv, lower2, upper2, mask2);
-        cv.bitwise_or(mask, mask2, mask);
-        lower2.delete(); upper2.delete(); mask2.delete();
-      } else {
-        lower1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [hLow, sLow, vLow, 0]);
-        upper1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [hHigh, sHigh, vHigh, 255]);
-        cv.inRange(hsv, lower1, upper1, mask);
-      }
-
-      const kernel = cv.Mat.ones(3, 3, cv.CV_8U);
-      cv.morphologyEx(mask, mask, cv.MORPH_OPEN, kernel);
-      cv.dilate(mask, mask, kernel);
-
-      rgb.delete(); hsv.delete(); lower1.delete(); upper1.delete(); kernel.delete();
-      return mask;
-    }
-
-    function getLineMaskRatio(mask, x1, y1, x2, y2) {
-      if (!mask || mask.isDeleted && mask.isDeleted()) return 0;
-      const samples = 44;
-      const halfWidth = 3;
-      let hit = 0;
-      let total = 0;
-      for (let i = 0; i <= samples; i++) {
-        const t = i / samples;
-        const cx = x1 + (x2 - x1) * t;
-        const cy = y1 + (y2 - y1) * t;
-        for (let oy = -halfWidth; oy <= halfWidth; oy++) {
-          for (let ox = -halfWidth; ox <= halfWidth; ox++) {
-            const x = Math.round(cx + ox);
-            const y = Math.round(cy + oy);
-            if (x < 0 || x >= canvasW || y < 0 || y >= canvasH) continue;
-            total++;
-            if (mask.ucharPtr(y, x)[0] > 0) hit++;
-          }
-        }
-      }
-      return total > 0 ? hit / total : 0;
-    }
 
     function startSkinDrag(pos) {
       const d1 = distance(pos, skinP1);
@@ -911,10 +826,9 @@
         lastAngleValue = null;
         lastStatusValue = "";
         lastStatusClassValue = "";
-        smoothedLine = null; 
-        skinColorFilterEnabled = false;
-        sampledSkinHsv = null;
-        sampledSkinRgb = null;
+        smoothedLine = null;
+        autoSkinCandidate = null;
+        autoSkinFoundFrame = 0; 
 
         processing = true;
         paused = false;
@@ -1048,8 +962,6 @@
       let blur = new cv.Mat();
       let edges = new cv.Mat();
       let lines = new cv.Mat();
-      let skinMask = null;
-      let skinMaskInv = null;
 
       let bestLine = null;
       let angleValue = null;
@@ -1058,14 +970,6 @@
 
       try {
         cv.cvtColor(srcFull, gray, cv.COLOR_RGBA2GRAY);
-
-        skinMask = createAdaptiveSkinMask(srcFull);
-        if (skinMask) {
-          skinMaskInv = new cv.Mat();
-          cv.bitwise_not(skinMask, skinMaskInv);
-          cv.bitwise_and(gray, gray, gray, skinMaskInv);
-        }
-
         cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
         cv.Canny(blur, edges, 55, 155);
 
@@ -1078,6 +982,8 @@
           50, 
           15
         );
+
+        updateAutoSkinLineFromHough(lines);
 
         let bestScore = 0;
         const roi = getCenterRoi();
@@ -1107,15 +1013,6 @@
 
           const candidateLine = { x1, y1, x2, y2 };
           const insertionAngle = calcInsertionAngle(candidateLine);
-
-          if (skinMask) {
-            const skinRatio = getLineMaskRatio(skinMask, x1, y1, x2, y2);
-            if (
-              skinRatio > skinColorRejectRatio &&
-              distToSkin < skinRejectDistancePx &&
-              insertionAngle < skinParallelRejectAngle
-            ) continue;
-          }
 
           if (insertionAngle < minNeedleAngle || insertionAngle > maxNeedleAngle) continue;
 
@@ -1169,8 +1066,6 @@
       } catch (e) {
         console.error(e);
       } finally {
-        if (skinMask) skinMask.delete();
-        if (skinMaskInv) skinMaskInv.delete();
         srcFull.delete(); gray.delete(); blur.delete(); edges.delete(); lines.delete();
       }
 
@@ -1338,19 +1233,35 @@
     function drawSkinReferenceLine() {
       ctx.save();
       const extended = getExtendedSkinLinePoints();
+      const mainColor = skinAutoMode ? "#8ab4f8" : "#4ade80";
+      const labelText = skinAutoMode ? "AUTO" : "L";
+      const rightLabelText = skinAutoMode ? "AUTO" : "R";
+
       ctx.lineWidth = 3;
-      ctx.strokeStyle = "#4ade80";
+      ctx.strokeStyle = mainColor;
       ctx.setLineDash([10, 10]);
       ctx.beginPath();
       ctx.moveTo(extended.x1, extended.y1); ctx.lineTo(extended.x2, extended.y2);
       ctx.stroke();
+
+      if (skinAutoMode && autoSkinCandidate && frameCount - autoSkinFoundFrame < 12) {
+        ctx.setLineDash([4, 8]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+        ctx.beginPath();
+        ctx.moveTo(autoSkinCandidate.x1, autoSkinCandidate.y1);
+        ctx.lineTo(autoSkinCandidate.x2, autoSkinCandidate.y2);
+        ctx.stroke();
+      }
+
       ctx.setLineDash([]);
       ctx.lineWidth = 6;
-      ctx.strokeStyle = "#4ade80";
+      ctx.strokeStyle = mainColor;
       ctx.beginPath();
       ctx.moveTo(skinP1.x, skinP1.y); ctx.lineTo(skinP2.x, skinP2.y);
       ctx.stroke();
-      drawHandle(skinP1.x, skinP1.y, "L"); drawHandle(skinP2.x, skinP2.y, "R");
+      drawHandle(skinP1.x, skinP1.y, labelText);
+      drawHandle(skinP2.x, skinP2.y, rightLabelText);
       ctx.restore();
     }
 
@@ -1372,7 +1283,7 @@
       ctx.lineWidth = 3;
       ctx.stroke();
       ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
-      ctx.font = "bold 16px sans-serif";
+      ctx.font = label.length > 1 ? "bold 10px sans-serif" : "bold 16px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(label, x, y);
