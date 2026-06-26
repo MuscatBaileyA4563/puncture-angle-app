@@ -94,8 +94,8 @@
       left: 0;
       right: 0;
       display: flex;
-      flex-wrap: wrap; /* nowrap から wrap に変更して折り返しを許可 */
-      align-items: center; /* flex-start から center に変更して高さを揃える */
+      flex-wrap: wrap;
+      align-items: center;
       gap: 10px;
       padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
       background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
@@ -111,7 +111,7 @@
       display: flex;
       gap: 8px;
       flex: 0 0 auto;
-      height: 64px; /* ここが基準の高さ */
+      height: 64px;
       align-items: stretch;
     }
 
@@ -148,8 +148,8 @@
     #fullscreenBtn { background: rgba(51, 65, 85, 0.75); }
 
     .ui-box {
-      height: 64px; /* ボタンと高さを揃える */
-      display: flex; /* grid から flex に変更 */
+      height: 64px;
+      display: flex;
       align-items: center;
       gap: 10px;
       padding: 0 16px;
@@ -160,7 +160,7 @@
       -webkit-backdrop-filter: blur(var(--panel-blur));
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       position: relative;
-      flex: 1 1 240px; /* 画面幅が狭い場合は折り返し、余った幅は広がる */
+      flex: 1 1 240px;
       overflow: hidden;
     }
 
@@ -180,19 +180,14 @@
       font-size: 13px;
     }
 
-    /* アイコンとラベルは文字幅に合わせて固定 */
     .sliderBox > span:nth-child(1),
-    .depthBox > span:nth-child(1) {
-      flex: 0 0 auto;
-    }
-
+    .depthBox > span:nth-child(1),
     .sliderBox > span:nth-child(2),
     .depthBox > label {
       flex: 0 0 auto;
       white-space: nowrap;
     }
 
-    /* スライダーは残りの領域をすべて自動で埋める */
     #frameSlider,
     #depthSlider {
       flex: 1 1 0 !important;
@@ -335,10 +330,9 @@
 
     details.note { display: none; }
 
-    /* モバイル・縦画面時の調整 */
     @media (orientation: portrait), (max-width: 980px) {
       .topOverlay {
-        flex-wrap: wrap; /* 折り返しを許可 */
+        flex-wrap: wrap;
         align-items: center;
         gap: 6px;
         padding: max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) 6px max(6px, env(safe-area-inset-left));
@@ -346,7 +340,7 @@
 
       .buttonRow {
         flex: 0 0 auto;
-        height: 46px; /* 縦画面時の基準の高さ */
+        height: 46px;
         gap: 4px;
       }
 
@@ -364,9 +358,8 @@
       .btnText { font-size: 9px; letter-spacing: 0; }
 
       .ui-box {
-        flex: 1 1 150px; /* 幅が狭くなったら折り返す */
-        height: 46px; /* ボタンと高さを揃える */
-        display: flex; /* flexレイアウトに変更 */
+        flex: 1 1 150px;
+        height: 46px;
         align-items: center;
         gap: 6px;
         padding: 0 10px;
@@ -396,7 +389,9 @@
         padding: 8px;
       }
 
-      .panel-primary, .panel-status, .panel-secondary {
+      .panel-primary,
+      .panel-status,
+      .panel-secondary {
         justify-content: center;
       }
     }
@@ -409,7 +404,7 @@
       }
 
       .buttonRow {
-        height: 42px; /* スマホ画面時の基準の高さ */
+        height: 42px;
         gap: 3px;
       }
 
@@ -426,17 +421,21 @@
       .btnText { font-size: 8px; }
 
       .ui-box {
-        height: 42px; /* ボタンと高さを揃える */
-        flex: 1 1 130px; 
+        height: 42px;
+        flex: 1 1 130px;
         gap: 4px;
         padding: 0 8px;
       }
 
-      .ui-box > span:nth-child(1) { display: none; } /* スマホではアイコンを隠してスペース確保 */
-      
-      .sliderBox, .depthBox { font-size: 9px; }
+      .ui-box > span:nth-child(1) {
+        display: none;
+      }
+
+      .sliderBox,
+      .depthBox { font-size: 9px; }
       #depthLabel { font-size: 10px !important; }
-      #frameSlider, #depthSlider { height: 24px; }
+      #frameSlider,
+      #depthSlider { height: 24px; }
     }
 
   </style>
