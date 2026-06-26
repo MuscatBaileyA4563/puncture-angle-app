@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>穿刺針 刺入角 自動測定アプリ</title>
 
-  <meta name="theme-color" content="#000000" />
+  <meta name="theme-color" content="#0f172a" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -13,14 +13,20 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./icon-192.png" />
 
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet" />
+
   <style>
     :root {
-      --primary: #1f6feb;
-      --warning: #f59e0b;
-      --danger: #dc2626;
-      --ok: #22c55e;
-      --text: #ffffff;
-      --muted: rgba(255,255,255,0.78);
+      --bg-panel: rgba(15, 23, 42, 0.85); 
+      --border-color: rgba(255, 255, 255, 0.15);
+      --primary: #8ab4f8; 
+      --gemini-gradient: linear-gradient(135deg, #4285f4, #9b72cb, #d96570); 
+      --warning: #fbbf24;
+      --danger: #ef4444;
+      --ok: #4ade80;
+      --text-main: #ffffff;
+      --text-muted: rgba(255, 255, 255, 0.65);
+      --panel-blur: 12px;
     }
 
     * {
@@ -35,32 +41,22 @@
       height: 100%;
       overflow: hidden;
       background: #000;
-      color: var(--text);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", "Meiryo", sans-serif;
+      color: var(--text-main);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Google Sans", "Yu Gothic", "Meiryo", sans-serif;
       overscroll-behavior: none;
       touch-action: none;
     }
-
 
     @media all and (display-mode: standalone) {
       html, body, #appShell {
         width: 100vw;
         height: 100dvh;
-        overflow: hidden;
-        background: #000;
       }
     }
 
-    html:fullscreen,
-    body:fullscreen,
-    #appShell:fullscreen {
+    html:fullscreen, body:fullscreen, #appShell:fullscreen {
       width: 100vw;
       height: 100dvh;
-      background: #000;
-    }
-
-    body {
-      display: block;
     }
 
     #appShell {
@@ -78,8 +74,6 @@
       height: 100%;
       background: #000;
       overflow: hidden;
-      touch-action: none;
-      user-select: none;
     }
 
     video, canvas {
@@ -90,303 +84,245 @@
       display: block;
     }
 
-    video {
-      z-index: 1;
-      object-fit: fill;
-      background: #000;
-    }
-
-    canvas {
-      z-index: 2;
-      cursor: crosshair;
-      touch-action: none;
-    }
+    video { z-index: 1; object-fit: fill; background: #000; }
+    canvas { z-index: 2; cursor: crosshair; touch-action: none; }
 
     .topOverlay {
       position: absolute;
       z-index: 5;
-      top: max(6px, env(safe-area-inset-top));
-      left: max(8px, env(safe-area-inset-left));
-      right: max(8px, env(safe-area-inset-right));
+      top: 0;
+      left: 0;
+      right: 0;
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
-      padding: 0;
-      background: transparent;
+      gap: 12px;
+      padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+      background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+      pointer-events: none;
+    }
+
+    .topOverlay > * {
+      pointer-events: auto;
     }
 
     .buttonRow {
       display: flex;
-      gap: 8px;
-      justify-content: flex-start;
-      align-items: center;
+      gap: 10px;
       flex: 0 0 auto;
-      flex-wrap: nowrap;
     }
 
     button {
-      min-width: 58px;
-      min-height: 58px;
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 14px;
-      padding: 6px 4px 4px;
-      background: rgba(17, 24, 39, 0.74);
+      min-width: 64px;
+      min-height: 64px;
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 8px;
+      background: var(--bg-panel);
       color: #fff;
       font-size: 11px;
-      font-weight: 800;
+      font-weight: 700;
       cursor: pointer;
-      touch-action: manipulation;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 2px;
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
+      gap: 4px;
+      backdrop-filter: blur(var(--panel-blur));
+      -webkit-backdrop-filter: blur(var(--panel-blur));
+      transition: transform 0.1s, background 0.2s, border-color 0.2s;
     }
 
-    button:active {
-      transform: scale(0.98);
-    }
+    button:active { transform: scale(0.95); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
+    .btnIcon { font-size: 28px; line-height: 1; }
+    .btnText { font-size: 11px; letter-spacing: 0.05em; }
 
-    #pauseBtn { background: rgba(245, 158, 11, 0.88); }
-    #stopBtn { background: rgba(220, 38, 38, 0.88); }
-    #fullscreenBtn { background: rgba(55, 65, 81, 0.88); }
+    #pauseBtn { background: rgba(245, 158, 11, 0.75); border-color: rgba(251, 191, 36, 0.5); }
+    #stopBtn { background: rgba(220, 38, 38, 0.75); border-color: rgba(248, 113, 113, 0.5); }
+    #fullscreenBtn { background: rgba(51, 65, 85, 0.75); }
 
-    .btnIcon {
-      font-size: 22px;
-      line-height: 1;
-      font-weight: 900;
-    }
-
-    .btnText {
-      font-size: 10px;
-      line-height: 1;
-      letter-spacing: 0.02em;
+    .ui-box {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      border-radius: 16px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      backdrop-filter: blur(var(--panel-blur));
+      -webkit-backdrop-filter: blur(var(--panel-blur));
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      position: relative;
     }
 
     .sliderBox {
-      height: 58px;
-      min-width: 190px;
+      flex: 1 1 200px;
       max-width: 300px;
-      flex: 1 1 220px;
-      display: grid;
-      grid-template-columns: auto 1fr;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      font-size: clamp(10px, 1.5vw, 12px);
-      font-weight: 800;
-      padding: 0 10px;
-      border-radius: 14px;
-      background: rgba(0, 0, 0, 0.42);
-      border: 1px solid rgba(255,255,255,0.16);
-      backdrop-filter: blur(5px);
-      -webkit-backdrop-filter: blur(5px);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
     }
 
-    .sliderLabel {
-      white-space: nowrap;
-      line-height: 1;
-    }
-
-    #frameSlider {
-      width: 100%;
-      height: 26px;
-      cursor: pointer;
-    }
-
-    #frameSlider:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
+    #frameSlider { flex: 1; height: 32px; cursor: pointer; accent-color: #9b72cb; }
 
     .depthBox {
-      height: 58px;
-      min-width: 300px;
-      flex: 1.15 1 320px;
-      display: grid;
-      grid-template-columns: auto minmax(58px, 76px) auto minmax(130px, 1fr);
-      align-items: center;
-      gap: 8px;
+      flex: 2 1 350px;
       color: #fff;
-      font-size: clamp(10px, 1.5vw, 12px);
-      font-weight: 800;
-      padding: 0 10px;
-      border-radius: 14px;
-      background: rgba(0, 0, 0, 0.42);
-      border: 1px solid rgba(255,255,255,0.16);
-      backdrop-filter: blur(5px);
-      -webkit-backdrop-filter: blur(5px);
+      font-size: 14px;
+      font-weight: 700;
     }
 
-    #depthInput {
-      width: 100%;
-      min-height: 34px;
-      border: 1px solid rgba(255,255,255,0.32);
-      border-radius: 9px;
-      padding: 3px 8px;
-      background: rgba(255,255,255,0.92);
-      color: #111827;
-      font-size: clamp(14px, 2vw, 17px);
-      font-weight: 900;
-      text-align: center;
-    }
-
-    #reachPreview {
-      color: #ffffff;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
+    /* 下部情報パネル */
     #infoPanel {
       position: absolute;
       z-index: 4;
       left: 0;
       right: 0;
       bottom: 0;
-      height: calc(clamp(58px, 12.5dvh, 86px) + 10px);
-      display: grid;
-      grid-template-columns: minmax(190px, 1fr) minmax(260px, 1.15fr) minmax(250px, 1fr);
-      grid-template-areas:
-        "angle reach status"
-        "frame reach skin";
-      column-gap: 18px;
-      row-gap: 4px;
+      padding: 10px max(24px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+      background: var(--bg-panel);
+      border-top: 1px solid var(--border-color);
+      backdrop-filter: blur(var(--panel-blur));
+      -webkit-backdrop-filter: blur(var(--panel-blur));
+      
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
       align-items: center;
-      padding: 8px max(16px, env(safe-area-inset-right)) calc(max(8px, env(safe-area-inset-bottom)) + 10px) max(16px, env(safe-area-inset-left));
-      border-radius: 0;
-      background: rgba(0, 0, 0, 0.88);
-      color: #fff;
-      text-align: left;
+      flex-wrap: nowrap;
+      gap: 16px;
       pointer-events: none;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    }
+
+    .panel-primary, .panel-secondary, .panel-status {
+      display: flex;
+      align-items: center;
+      margin: 0;
     }
 
     #angleWrap {
-      grid-area: angle;
-      align-self: end;
-      font-size: clamp(14px, 2.1vw, 19px);
-      font-weight: 900;
+      color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       white-space: nowrap;
-      line-height: 1.05;
     }
 
     #angle {
-      color: #ffffff;
-      font-size: clamp(24px, 4.3vw, 40px);
-      letter-spacing: -0.03em;
-    }
-
-    #status {
-      grid-area: status;
-      align-self: end;
-      font-size: clamp(14px, 2.1vw, 19px);
+      color: #fff;
+      font-size: clamp(28px, 4.5vw, 42px);
       font-weight: 900;
-      line-height: 1.1;
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    #frameInfo {
-      grid-area: frame;
-      align-self: start;
-      text-align: left;
+      letter-spacing: -0.02em;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      line-height: 1;
+      font-family: "Google Sans", sans-serif;
     }
 
     #reachInfo {
-      grid-area: reach;
-      color: #ffffff;
-      font-size: clamp(14px, 2.2vw, 20px);
+      color: var(--primary);
+      font-size: clamp(14px, 2.2vw, 18px);
       font-weight: 900;
-      line-height: 1.2;
-      text-align: center;
-      align-self: center;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      background: rgba(138, 180, 248, 0.1);
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(138, 180, 248, 0.3);
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
     }
 
-    #skinInfo {
-      grid-area: skin;
-      align-self: start;
+    .gemini-sparkle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .gemini-sparkle .material-symbols-rounded {
+      font-size: 20px;
+      background: var(--gemini-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    #status {
+      font-size: clamp(14px, 2.2vw, 18px);
+      font-weight: 900;
       text-align: right;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.4);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      gap: 8px;
       white-space: nowrap;
     }
 
-    #frameInfo,
-    #skinInfo,
-    #orientationHint {
-      color: rgba(255,255,255,0.78);
-      font-size: clamp(10px, 1.6vw, 13px);
-      line-height: 1.15;
-    }
-
-    #orientationHint {
+    /* 針先のフローティングラベル */
+    #floatingAngleLabel {
+      position: absolute;
+      z-index: 6;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 12px 20px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
       display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(var(--panel-blur));
+      -webkit-backdrop-filter: blur(var(--panel-blur));
+    }
+    
+    #f-angle {
+      color: #fff;
+      font-size: clamp(28px, 4.5vw, 42px);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      line-height: 1;
+      font-family: "Google Sans", sans-serif;
     }
 
-    .ok { color: #4ade80; }
-    .warn { color: #ff6b6b; }
-    .paused { color: #fbbf24; }
-
-    details.note {
-      display: none;
+    #f-reach {
+      color: var(--primary);
+      font-size: clamp(14px, 2.2vw, 18px);
+      font-weight: 900;
+      margin-top: 6px;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.5);
     }
+
+    .ok { color: #4ade80 !important; border: 1px solid rgba(74, 222, 128, 0.3); }
+    .warn { color: #f87171 !important; border: 1px solid rgba(248, 113, 113, 0.3); }
+    .paused { color: #fbbf24 !important; border: 1px solid rgba(251, 191, 36, 0.3); }
+
+    details.note { display: none; }
 
     @media (orientation: portrait), (max-width: 900px) {
-      .topOverlay {
-        flex-wrap: wrap;
-        align-items: flex-start;
-        gap: 6px;
+      .topOverlay { gap: 8px; }
+      .ui-box { height: 54px; padding: 0 12px; }
+      button { min-width: 54px; min-height: 54px; }
+      #depthLabel { font-size: 16px; }
+
+      #infoPanel {
+        flex-wrap: wrap; 
+        justify-content: center;
+        gap: 8px;
+        padding: 10px;
       }
 
-      .buttonRow {
-        gap: 6px;
-      }
-
-      button {
-        min-width: 52px;
-        min-height: 52px;
-      }
-
-      .sliderBox {
-        height: 52px;
-        min-width: 170px;
-        flex: 1 1 180px;
-      }
-
-      .depthBox {
-        height: 52px;
-        min-width: 250px;
-        flex: 1 1 260px;
-      }
-
-      @media (orientation: portrait) {
-        #infoPanel {
-          height: auto;
-          min-height: 96px;
-          grid-template-columns: 1fr;
-          grid-template-areas:
-            "angle"
-            "status"
-            "reach"
-            "frame"
-            "skin";
-          text-align: center;
-        }
-
-        #status,
-        #skinInfo,
-        #frameInfo {
-          text-align: center;
-        }
+      .panel-primary, .panel-status, .panel-secondary {
+        justify-content: center;
       }
     }
   </style>
@@ -398,59 +334,65 @@
       <video id="video" autoplay playsinline muted></video>
       <canvas id="canvas" width="960" height="540"></canvas>
 
+      <div id="floatingAngleLabel">
+        <div id="f-angle">--.-°</div>
+        <div id="f-reach">到達 --.-mm</div>
+      </div>
+
       <div class="topOverlay">
         <div class="buttonRow">
-          <button type="button" onclick="startCamera()" aria-label="カメラ開始"><span class="btnIcon">📷</span><span class="btnText">開始</span></button>
-          <button type="button" id="pauseBtn" onclick="togglePause()" aria-label="一時停止"><span class="btnIcon">⏸</span><span class="btnText">停止</span></button>
-          <button type="button" id="stopBtn" onclick="stopCamera()" aria-label="終了"><span class="btnIcon">■</span><span class="btnText">終了</span></button>
-          <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()" aria-label="全画面"><span class="btnIcon">⛶</span><span class="btnText">全画面</span></button>
+          <button type="button" id="startBtn" onclick="startCamera()" aria-label="カメラ開始">
+            <span class="material-symbols-rounded btnIcon">photo_camera</span>
+            <span class="btnText">開始</span>
+          </button>
+          <button type="button" id="pauseBtn" onclick="togglePause()" aria-label="一時停止">
+            <span class="material-symbols-rounded btnIcon">pause</span>
+            <span class="btnText">停止</span>
+          </button>
+          <button type="button" id="stopBtn" onclick="stopCamera()" aria-label="終了">
+            <span class="material-symbols-rounded btnIcon">stop</span>
+            <span class="btnText">終了</span>
+          </button>
+          <button type="button" id="fullscreenBtn" onclick="toggleFullscreen()" aria-label="全画面">
+            <span class="material-symbols-rounded btnIcon">fullscreen</span>
+            <span class="btnText">全画面</span>
+          </button>
         </div>
 
-        <div class="sliderBox">
-          <div class="sliderLabel">確認</div>
-          <input
-            type="range"
-            id="frameSlider"
-            min="0"
-            max="0"
-            value="0"
-            step="1"
-            disabled
-            oninput="onSliderMove()"
-          />
+        <div class="ui-box sliderBox">
+          <span class="material-symbols-rounded" style="font-size: 18px;">history</span>
+          <span>確認</span>
+          <input type="range" id="frameSlider" min="0" max="0" value="0" step="1" disabled oninput="onSliderMove()" />
         </div>
 
-        <div class="depthBox">
-          <label for="depthInput">深さ</label>
-          <input
-            type="number"
-            id="depthInput"
-            inputmode="decimal"
-            min="0"
-            step="0.1"
-            placeholder="mm"
-            oninput="updateReachDisplay(lastAngleValue)"
-          />
-          <span>mm</span>
-          <span id="reachPreview">推定到達距離：--.- mm</span>
+        <div class="ui-box depthBox">
+          <span class="material-symbols-rounded" style="font-size: 18px; color: var(--primary);">straighten</span>
+          <label for="depthSlider" style="white-space: nowrap;">深さ: <span id="depthLabel" style="font-weight: 900; font-size: 16px; color: #fff;">3.0</span> mm</label>
+          <input type="range" id="depthSlider" min="1.0" max="8.0" value="3.0" step="0.1" oninput="updateDepthFromSlider()" style="flex: 1; margin: 0 12px; accent-color: #9b72cb;" />
         </div>
       </div>
 
       <div id="infoPanel">
-        <div id="angleWrap">刺入角：<span id="angle">--.-°</span></div>
-        <div id="status">OpenCV.js読み込み中</div>
-        <div id="reachInfo">推定到達距離：深さを入力してください</div>
-        <div id="orientationHint">カメラ開始時に横画面ロックを試行します</div>
-        <div id="frameInfo">保存フレーム：0 / 360</div>
-        <div id="skinInfo">皮膚基準線：未設定</div>
+        <div class="panel-primary">
+          <div id="angleWrap">
+            <span class="material-symbols-rounded" style="color: var(--primary);">vaccines</span>
+            刺入角度 <span id="angle">--.-°</span>
+          </div>
+        </div>
+        
+        <div class="panel-secondary">
+          <div id="reachInfo">到達距離：深さを設定</div>
+        </div>
+
+        <div class="panel-status">
+          <div id="status">
+            <span class="gemini-sparkle"><span class="material-symbols-rounded">temp_preferences_custom</span></span>
+            OpenCV.js読込中
+          </div>
+        </div>
       </div>
     </div>
   </div>
-
-  <details class="note">
-    <summary>使い方・設定</summary>
-    発熱対策として、カメラ15fps、OpenCV処理5フレームに1回、保存フレーム360枚に軽量化しています。血管深さをmmで入力すると、現在の刺入角から針先が血管深さに到達するまでの推定進行距離を計算します。計算式は「推定到達距離 = 血管深さ ÷ sin(刺入角)」です。
-  </details>
 
   <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
@@ -459,16 +401,21 @@
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
+    const hiddenCanvas = document.createElement("canvas");
+    const canvasW = canvas.width;
+    const canvasH = canvas.height;
+    hiddenCanvas.width = canvasW;
+    hiddenCanvas.height = canvasH;
+    const hiddenCtx = hiddenCanvas.getContext("2d", { willReadFrequently: true });
+
     const angleText = document.getElementById("angle");
     const statusText = document.getElementById("status");
-    const frameInfo = document.getElementById("frameInfo");
-    const skinInfo = document.getElementById("skinInfo");
-    const orientationHint = document.getElementById("orientationHint");
     const reachInfo = document.getElementById("reachInfo");
-    const depthInput = document.getElementById("depthInput");
-    const reachPreview = document.getElementById("reachPreview");
     const pauseBtn = document.getElementById("pauseBtn");
     const frameSlider = document.getElementById("frameSlider");
+    
+    const depthSlider = document.getElementById("depthSlider");
+    const depthLabel = document.getElementById("depthLabel");
 
     let stream = null;
     let processing = false;
@@ -476,56 +423,45 @@
     let cvReady = false;
     let animationId = null;
     let frameCount = 0;
+    
     let lastBestLine = null;
     let lastAngleValue = null;
     let lastStatusValue = "";
     let lastStatusClassValue = "";
 
-    // 背面カメラ使用を前提に左右反転補正は行わない。
+    let smoothedLine = null; 
+    const smoothingFactor = 0.65; 
+
     const mirrorFix = false;
 
-    // スマホ用に軽量化。重い場合は 100、余裕があれば 300 程度まで可。
     const maxBufferFrames = 360;
     let frameBuffer = [];
     let reviewIndex = -1;
 
-    // 内部処理解像度。表示はCSSでスマホ幅に自動調整。
-    const canvasW = canvas.width;
-    const canvasH = canvas.height;
-
-    // 皮膚基準線：左右2点で管理
     let skinP1 = { x: canvasW * 0.16, y: canvasH * 0.65 };
     let skinP2 = { x: canvasW * 0.84, y: canvasH * 0.65 };
 
     let draggingMode = null;
     let lastDragPos = null;
 
-    // スマホでつかみやすいように判定範囲を広めにする
     const handleRadius = 16;
     const handleHitRadius = 42;
     const lineHitTolerance = 34;
 
-    // 皮膚基準線付近の検出幅
-    // 針は皮膚線の上側に写ることが多いため、上側だけ広めに検出する。
-    const detectionBandUpperWidth = canvasH / 5;   // 皮膚線より上側：約108px
-    const detectionBandLowerWidth = canvasH / 12;  // 皮膚線より下側：約45px
+    const detectionBandUpperWidth = canvasH / 5;
+    const detectionBandLowerWidth = canvasH / 12;
 
-    // 横幅の中央のみを針候補にする。0.70 = 中央70%。誤検出が多ければ 0.60 にする。
-    const centerRoiRate = 0.70;
+    const centerRoiRate = 0.75;
+    const processEveryNFrames = 2;
 
-    // スマホ負荷対策。5なら5フレームに1回だけOpenCV処理。
-    const processEveryNFrames = 5;
-
-    // 認識する刺入角の範囲。急角度の穿刺も拾えるように75°まで許容。
     const minNeedleAngle = 5;
     const maxNeedleAngle = 75;
 
     function waitForOpenCV() {
       if (window.cv && cv.Mat) {
         cvReady = true;
-        statusText.textContent = "待機中";
-        statusText.className = "";
-        updateSkinInfo();
+        updateStatusWithSparkle("待機中", "");
+        updateReachDisplay(null);
       } else {
         setTimeout(waitForOpenCV, 300);
       }
@@ -533,29 +469,25 @@
     waitForOpenCV();
     setPauseButtonState(false);
 
-    updateOrientationHint();
-    window.addEventListener("resize", updateOrientationHint);
-    window.addEventListener("orientationchange", function() {
-      setTimeout(updateOrientationHint, 300);
+    window.addEventListener("resize", function() {
+      if (paused && reviewIndex >= 0 && frameBuffer[reviewIndex]) {
+        updateFloatingLabel(frameBuffer[reviewIndex].floatingData);
+      }
     });
-
-    function updateOrientationHint() {
-      const isPortrait = window.innerHeight > window.innerWidth;
-      orientationHint.textContent = isPortrait
-        ? "縦向きです：カメラ開始または全画面/横向きで横画面ロックを試行します"
-        : "横向き表示中：皮膚線ハンドルを指で調整できます";
-    }
 
     function setPauseButtonState(isPaused) {
       pauseBtn.innerHTML = isPaused
-        ? '<span class="btnIcon">▶</span><span class="btnText">再開</span>'
-        : '<span class="btnIcon">⏸</span><span class="btnText">停止</span>';
+        ? '<span class="material-symbols-rounded btnIcon">play_arrow</span><span class="btnText">再開</span>'
+        : '<span class="material-symbols-rounded btnIcon">pause</span><span class="btnText">停止</span>';
       pauseBtn.setAttribute('aria-label', isPaused ? '再開' : '一時停止');
     }
+    
+    function updateStatusWithSparkle(text, className) {
+      const icon = className === "ok" ? "check_circle" : (className === "warn" ? "warning" : "temp_preferences_custom");
+      statusText.innerHTML = `<span class="gemini-sparkle"><span class="material-symbols-rounded">${icon}</span></span> ${text}`;
+      statusText.className = className;
+    }
 
-    // ------------------------------
-    // Pointer Events：マウス・タッチ・ペンを統一処理
-    // ------------------------------
     canvas.addEventListener("pointerdown", function(e) {
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
@@ -566,22 +498,15 @@
     canvas.addEventListener("pointermove", function(e) {
       e.preventDefault();
       const pos = getCanvasPosition(e);
-
-      if (draggingMode) {
-        moveSkinDrag(pos);
-      } else {
-        updateCursor(pos);
-      }
+      if (draggingMode) { moveSkinDrag(pos); } else { updateCursor(pos); }
     });
 
     canvas.addEventListener("pointerup", function(e) {
-      e.preventDefault();
-      endSkinDrag();
+      e.preventDefault(); endSkinDrag();
     });
 
     canvas.addEventListener("pointercancel", function(e) {
-      e.preventDefault();
-      endSkinDrag();
+      e.preventDefault(); endSkinDrag();
     });
 
     function startSkinDrag(pos) {
@@ -589,15 +514,10 @@
       const d2 = distance(pos, skinP2);
       const dLine = distancePointToSegment(pos, skinP1, skinP2);
 
-      if (d1 <= handleHitRadius) {
-        draggingMode = "p1";
-      } else if (d2 <= handleHitRadius) {
-        draggingMode = "p2";
-      } else if (dLine <= lineHitTolerance) {
-        draggingMode = "line";
-      } else {
-        draggingMode = null;
-      }
+      if (d1 <= handleHitRadius) draggingMode = "p1";
+      else if (d2 <= handleHitRadius) draggingMode = "p2";
+      else if (dLine <= lineHitTolerance) draggingMode = "line";
+      else draggingMode = null;
 
       lastDragPos = pos;
     }
@@ -621,18 +541,15 @@
         const newP2y = skinP2.y + dy;
 
         if (newP1x >= 20 && newP2x <= canvasW - 20) {
-          skinP1.x = newP1x;
-          skinP2.x = newP2x;
+          skinP1.x = newP1x; skinP2.x = newP2x;
         }
 
         if (newP1y >= 25 && newP1y <= canvasH - 25 && newP2y >= 25 && newP2y <= canvasH - 25) {
-          skinP1.y = newP1y;
-          skinP2.y = newP2y;
+          skinP1.y = newP1y; skinP2.y = newP2y;
         }
       }
 
       lastDragPos = pos;
-      updateSkinInfo();
 
       if (paused && reviewIndex >= 0 && frameBuffer.length > 0) {
         showBufferedFrame(reviewIndex);
@@ -650,139 +567,73 @@
       const d2 = distance(pos, skinP2);
       const dLine = distancePointToSegment(pos, skinP1, skinP2);
 
-      if (d1 <= handleHitRadius || d2 <= handleHitRadius) {
-        canvas.style.cursor = "grab";
-      } else if (dLine <= lineHitTolerance) {
-        canvas.style.cursor = "move";
-      } else {
-        canvas.style.cursor = "crosshair";
-      }
+      if (d1 <= handleHitRadius || d2 <= handleHitRadius) canvas.style.cursor = "grab";
+      else if (dLine <= lineHitTolerance) canvas.style.cursor = "move";
+      else canvas.style.cursor = "crosshair";
     }
 
     function getCanvasPosition(event) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
-
-      return {
-        x: (event.clientX - rect.left) * scaleX,
-        y: (event.clientY - rect.top) * scaleY
-      };
+      return { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY };
     }
 
-    function clamp(value, min, max) {
-      return Math.max(min, Math.min(max, value));
-    }
+    function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
     function distance(a, b) {
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
+      const dx = a.x - b.x; const dy = a.y - b.y;
       return Math.sqrt(dx * dx + dy * dy);
     }
 
     function distancePointToSegment(p, a, b) {
-      const abx = b.x - a.x;
-      const aby = b.y - a.y;
-      const apx = p.x - a.x;
-      const apy = p.y - a.y;
+      const abx = b.x - a.x; const aby = b.y - a.y;
+      const apx = p.x - a.x; const apy = p.y - a.y;
       const ab2 = abx * abx + aby * aby;
-
       if (ab2 === 0) return distance(p, a);
-
       let t = (apx * abx + apy * aby) / ab2;
       t = clamp(t, 0, 1);
-
-      const nearest = {
-        x: a.x + t * abx,
-        y: a.y + t * aby
-      };
-
-      return distance(p, nearest);
-    }
-
-    function distancePointToInfiniteLine(p, a, b) {
-      const abx = b.x - a.x;
-      const aby = b.y - a.y;
-      const numerator = Math.abs(aby * p.x - abx * p.y + b.x * a.y - b.y * a.x);
-      const denominator = Math.sqrt(abx * abx + aby * aby);
-      if (denominator === 0) return 99999;
-      return numerator / denominator;
+      return distance(p, { x: a.x + t * abx, y: a.y + t * aby });
     }
 
     function signedVerticalDistanceToSkin(p, a, b) {
-      // p.x位置における皮膚基準線のY座標との差を返す。
-      // 返り値がマイナスなら皮膚線より画面上側、プラスなら画面下側。
       const dx = b.x - a.x;
-
-      if (Math.abs(dx) < 0.001) {
-        return p.y - a.y;
-      }
-
+      if (Math.abs(dx) < 0.001) return p.y - a.y;
       const slope = (b.y - a.y) / dx;
-      const skinYAtX = a.y + slope * (p.x - a.x);
-      return p.y - skinYAtX;
+      return p.y - (a.y + slope * (p.x - a.x));
     }
 
-    function updateSkinInfo() {
-      const skinAngle = getLineAngleDeg(skinP1, skinP2);
-      skinInfo.textContent = `皮膚基準線：${skinAngle.toFixed(1)}°｜左 ${Math.round(skinP1.x)},${Math.round(skinP1.y)}｜右 ${Math.round(skinP2.x)},${Math.round(skinP2.y)}`;
-    }
-
-    // ------------------------------
-    // 横画面・全画面制御
-    // ------------------------------
     async function requestLandscapeMode() {
       const target = document.getElementById("appShell") || document.documentElement;
-
-      // Android Chromeでは、画面向きロックは全画面中に成功しやすい。
-      // カメラ許可ダイアログ後に全画面が解除されることがあるため、複数回呼び出す。
       try {
         if (!document.fullscreenElement && target.requestFullscreen) {
           await target.requestFullscreen({ navigationUI: "hide" });
         }
-      } catch (e) {
-        console.warn("Fullscreen request failed:", e);
-      }
-
+      } catch (e) {}
       try {
         if (screen.orientation && screen.orientation.lock) {
           await screen.orientation.lock("landscape");
         }
-      } catch (e) {
-        console.warn("Landscape lock failed:", e);
-      }
-
-      updateOrientationHint();
+      } catch (e) {}
     }
 
     function scheduleFullscreenRetry() {
-      // 権限許可後やvideo.play後にURLバーが戻る端末向けの再試行。
-      // ユーザー操作扱いが残っていれば自動で全画面へ戻る。
       setTimeout(() => requestLandscapeMode(), 150);
       setTimeout(() => requestLandscapeMode(), 600);
       setTimeout(() => requestLandscapeMode(), 1200);
     }
 
     document.addEventListener("fullscreenchange", function() {
-      if (processing && !document.fullscreenElement) {
-        scheduleFullscreenRetry();
-      }
+      if (processing && !document.fullscreenElement) scheduleFullscreenRetry();
     });
 
-    // ------------------------------
-    // カメラ制御
-    // ------------------------------
     async function startCamera() {
       if (!cvReady) {
-        alert("OpenCV.jsの読み込み中です。数秒待ってから再度押してください。");
-        return;
+        alert("OpenCV.jsの読み込み中です。数秒待ってから再度押してください。"); return;
       }
-
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert("このブラウザではカメラを使用できません。iPhoneはSafari、AndroidはChromeでHTTPS接続を使用してください。");
-        return;
+        alert("このブラウザではカメラを使用できません。iPhoneはSafari、AndroidはChromeでHTTPS接続を使用してください。"); return;
       }
-
       if (processing) return;
 
       await requestLandscapeMode();
@@ -799,13 +650,8 @@
         });
 
         video.srcObject = stream;
-
-        // カメラ許可後に全画面が解除される端末があるため、再度全画面化を試行。
         await requestLandscapeMode();
-
         await video.play();
-
-        // 再生開始直後にもURLバーが戻ることがあるため追加で再試行。
         scheduleFullscreenRetry();
 
         frameBuffer = [];
@@ -815,6 +661,7 @@
         lastAngleValue = null;
         lastStatusValue = "";
         lastStatusClassValue = "";
+        smoothedLine = null; 
 
         processing = true;
         paused = false;
@@ -827,15 +674,12 @@
 
         angleText.textContent = "--.-°";
         updateReachDisplay(null);
-        statusText.textContent = "測定中";
-        statusText.className = "";
+        updateStatusWithSparkle("測定中", "");
 
-        updateFrameInfo();
-        updateSkinInfo();
         processFrame();
 
       } catch (err) {
-        alert("カメラを起動できませんでした。ブラウザのカメラ許可、HTTPS接続、背面カメラの使用可否を確認してください。\n\n詳細: " + err.message);
+        alert("カメラを起動できませんでした。ブラウザのカメラ許可、HTTPS接続をご確認ください。\n\n詳細: " + err.message);
       }
     }
 
@@ -844,57 +688,46 @@
       paused = false;
       draggingMode = null;
 
-      if (animationId) {
-        cancelAnimationFrame(animationId);
-        animationId = null;
-      }
-
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
+      if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+      if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
 
       video.srcObject = null;
       ctx.clearRect(0, 0, canvasW, canvasH);
+      hiddenCtx.clearRect(0, 0, canvasW, canvasH);
 
       frameBuffer = [];
       reviewIndex = -1;
       lastBestLine = null;
       lastAngleValue = null;
+      smoothedLine = null;
 
       angleText.textContent = "--.-°";
       updateReachDisplay(null);
-      statusText.textContent = "停止中";
-      statusText.className = "";
+      updateStatusWithSparkle("停止中", "");
       setPauseButtonState(false);
+      updateFloatingLabel(null);
 
       frameSlider.disabled = true;
       frameSlider.min = 0;
       frameSlider.max = 0;
       frameSlider.value = 0;
-
-      updateFrameInfo();
-      updateSkinInfo();
     }
 
     function togglePause() {
       if (!processing) return;
-
       paused = !paused;
 
       if (paused) {
         setPauseButtonState(true);
         reviewIndex = frameBuffer.length - 1;
         setupSliderForReview();
-
         if (reviewIndex >= 0) {
           frameSlider.value = reviewIndex;
           showBufferedFrame(reviewIndex);
         }
       } else {
         setPauseButtonState(false);
-        statusText.textContent = "測定中";
-        statusText.className = "";
+        updateStatusWithSparkle("測定中", "");
         reviewIndex = -1;
         frameSlider.disabled = true;
         processFrame();
@@ -903,13 +736,8 @@
 
     function setupSliderForReview() {
       if (frameBuffer.length <= 0) {
-        frameSlider.disabled = true;
-        frameSlider.min = 0;
-        frameSlider.max = 0;
-        frameSlider.value = 0;
-        return;
+        frameSlider.disabled = true; frameSlider.min = 0; frameSlider.max = 0; frameSlider.value = 0; return;
       }
-
       frameSlider.disabled = false;
       frameSlider.min = 0;
       frameSlider.max = frameBuffer.length - 1;
@@ -933,43 +761,36 @@
           await document.exitFullscreen();
         }
       } catch (e) {
-        alert("このブラウザでは全画面表示にできませんでした。端末を横向きにしてから再度試してください。");
+        alert("全画面表示に失敗しました。端末を横向きにしてください。");
       }
     }
 
-
-    function drawCameraFrame() {
-      ctx.save();
-      ctx.clearRect(0, 0, canvasW, canvasH);
-
+    function captureVideoToHidden() {
+      hiddenCtx.save();
       if (mirrorFix) {
-        ctx.translate(canvasW, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, canvasW, canvasH);
-      } else {
-        ctx.drawImage(video, 0, 0, canvasW, canvasH);
+        hiddenCtx.translate(canvasW, 0);
+        hiddenCtx.scale(-1, 1);
       }
-
-      ctx.restore();
+      hiddenCtx.drawImage(video, 0, 0, canvasW, canvasH);
+      hiddenCtx.restore();
     }
 
-    // ------------------------------
-    // メイン画像処理
-    // ------------------------------
     function processFrame() {
       if (!processing || paused) return;
 
       frameCount++;
-      drawCameraFrame();
 
       if (frameCount % processEveryNFrames !== 0) {
-        drawOverlays(lastBestLine, lastAngleValue, lastStatusValue, lastStatusClassValue);
-        // 発熱対策：OpenCV処理していない中間フレームは保存しない
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        let fData = drawOverlays(lastBestLine, lastAngleValue, lastStatusValue, lastStatusClassValue);
+        updateFloatingLabel(fData);
         animationId = requestAnimationFrame(processFrame);
         return;
       }
 
-      let srcFull = cv.imread(canvas);
+      captureVideoToHidden();
+      let srcFull = cv.imread(hiddenCanvas);
+      
       let gray = new cv.Mat();
       let blur = new cv.Mat();
       let edges = new cv.Mat();
@@ -990,8 +811,8 @@
           lines,
           1,
           Math.PI / 180,
-          55,
-          50,
+          60, 
+          50, 
           15
         );
 
@@ -1009,86 +830,87 @@
           const length = Math.sqrt(dx * dx + dy * dy);
           if (length < 45) continue;
 
-          const mid = {
-            x: (x1 + x2) / 2,
-            y: (y1 + y2) / 2
-          };
-
-          // スマホ撮影では腕や背景を拾いやすいため、中央横幅に限定
+          const mid = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
           if (mid.x < roi.left || mid.x > roi.right) continue;
 
-          // 皮膚基準線付近の帯状範囲だけを候補にする
-          // 皮膚線より上側は広く、下側は狭くする。
           const signedDistToSkin = signedVerticalDistanceToSkin(mid, skinP1, skinP2);
           const distToSkin = Math.abs(signedDistToSkin);
 
           if (signedDistToSkin < 0) {
-            // 画面上側：針が存在しやすいため広く許容
             if (distToSkin > detectionBandUpperWidth) continue;
           } else {
-            // 画面下側：背景誤検出を避けるため従来程度に制限
             if (distToSkin > detectionBandLowerWidth) continue;
           }
 
           const candidateLine = { x1, y1, x2, y2 };
           const insertionAngle = calcInsertionAngle(candidateLine);
 
-          // 穿刺角として現実的な候補範囲。急角度の穿刺も75°まで認識する。
           if (insertionAngle < minNeedleAngle || insertionAngle > maxNeedleAngle) continue;
 
-          // 長さを主評価、皮膚基準線に近いものを副評価
           const score = length - distToSkin * 0.7;
 
           if (score > bestScore) {
             bestScore = score;
-            bestLine = {
-              x1,
-              y1,
-              x2,
-              y2,
-              angle: insertionAngle,
-              length,
-              distToSkin
-            };
+            bestLine = { x1, y1, x2, y2, angle: insertionAngle, length, distToSkin };
           }
         }
 
         if (bestLine) {
-          angleValue = calcInsertionAngle(bestLine);
+          if (bestLine.y1 > bestLine.y2) {
+            let tx = bestLine.x1, ty = bestLine.y1;
+            bestLine.x1 = bestLine.x2; bestLine.y1 = bestLine.y2;
+            bestLine.x2 = tx; bestLine.y2 = ty;
+          }
+
+          if (!smoothedLine) {
+            smoothedLine = { ...bestLine };
+          } else {
+            const alpha = smoothingFactor;
+            smoothedLine.x1 = bestLine.x1 * alpha + smoothedLine.x1 * (1 - alpha);
+            smoothedLine.y1 = bestLine.y1 * alpha + smoothedLine.y1 * (1 - alpha);
+            smoothedLine.x2 = bestLine.x2 * alpha + smoothedLine.x2 * (1 - alpha);
+            smoothedLine.y2 = bestLine.y2 * alpha + smoothedLine.y2 * (1 - alpha);
+          }
+
+          angleValue = calcInsertionAngle(smoothedLine);
           const judge = getJudgeResult(angleValue);
           statusValue = judge.text;
           statusClassValue = judge.className;
+          lastBestLine = smoothedLine;
         } else {
+          smoothedLine = null; 
           angleValue = null;
-          statusValue = "皮膚基準線付近で針を検出できません";
+          statusValue = "針を検出できません";
           statusClassValue = "warn";
+          lastBestLine = null;
         }
 
-        lastBestLine = bestLine;
         lastAngleValue = angleValue;
         lastStatusValue = statusValue;
         lastStatusClassValue = statusClassValue;
 
-        drawCameraFrame();
-        drawOverlays(bestLine, angleValue, statusValue, statusClassValue);
-        saveCurrentFrame(angleValue, statusValue, statusClassValue);
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        let floatingData = drawOverlays(lastBestLine, angleValue, statusValue, statusClassValue);
+        updateFloatingLabel(floatingData);
+        saveCurrentFrame(angleValue, statusValue, statusClassValue, floatingData);
 
       } catch (e) {
         console.error(e);
       } finally {
-        srcFull.delete();
-        gray.delete();
-        blur.delete();
-        edges.delete();
-        lines.delete();
+        srcFull.delete(); gray.delete(); blur.delete(); edges.delete(); lines.delete();
       }
 
       animationId = requestAnimationFrame(processFrame);
     }
 
+    function updateDepthFromSlider() {
+      const val = Number(depthSlider.value).toFixed(1);
+      depthLabel.textContent = val;
+      updateReachDisplay(lastAngleValue);
+    }
 
     function getDepthMm() {
-      const value = Number(depthInput.value);
+      const value = Number(depthSlider.value);
       if (!Number.isFinite(value) || value <= 0) return null;
       return value;
     }
@@ -1096,83 +918,99 @@
     function calcReachDistanceMm(depthMm, angleDeg) {
       if (!Number.isFinite(depthMm) || depthMm <= 0) return null;
       if (!Number.isFinite(angleDeg) || angleDeg <= 0) return null;
-
       const rad = angleDeg * Math.PI / 180;
       const sinValue = Math.sin(rad);
       if (sinValue <= 0.001) return null;
-
       return depthMm / sinValue;
     }
 
     function formatReachText(angleDeg) {
       const depthMm = getDepthMm();
-
       if (depthMm === null) {
-        return "推定到達距離：深さを入力してください";
+        return { full: "到達距離：深さを設定", preview: "--.- mm" };
       }
-
       if (!Number.isFinite(angleDeg) || angleDeg <= 0) {
-        return `推定到達距離：--.- mm｜深さ ${depthMm.toFixed(1)} mm`;
+        return { full: `到達距離：--.- mm｜深さ ${depthMm.toFixed(1)}mm`, preview: "--.- mm" };
       }
-
       const reachMm = calcReachDistanceMm(depthMm, angleDeg);
       if (reachMm === null) {
-        return `推定到達距離：計算不可｜深さ ${depthMm.toFixed(1)} mm`;
+        return { full: `到達距離：計算不可｜深さ ${depthMm.toFixed(1)}mm`, preview: "計算不可" };
       }
-
-      return `推定到達距離：約 ${reachMm.toFixed(1)} mm｜深さ ${depthMm.toFixed(1)} mm`;
+      return { full: `到達距離：約 ${reachMm.toFixed(1)} mm｜深さ ${depthMm.toFixed(1)}mm`, preview: `${reachMm.toFixed(1)} mm` };
     }
 
     function updateReachDisplay(angleDeg) {
-      const text = formatReachText(angleDeg);
-      reachInfo.textContent = text;
-      reachPreview.textContent = text;
+      const texts = formatReachText(angleDeg);
+      reachInfo.textContent = texts.full;
     }
 
     function drawOverlays(bestLine, angleValue, statusValue, statusClassValue) {
       drawDetectionRoi();
       drawSkinReferenceLine();
 
+      let floatingData = null;
+
       if (bestLine && angleValue !== null) {
         drawNeedleLine(bestLine);
         angleText.textContent = angleValue.toFixed(1) + "°";
         updateReachDisplay(angleValue);
-        drawAngleTextOnCanvas(angleValue, bestLine);
-        statusText.textContent = statusValue;
-        statusText.className = statusClassValue;
+        floatingData = drawAngleTextOnCanvas(angleValue, bestLine);
+        updateStatusWithSparkle(statusValue, statusClassValue);
       } else {
         angleText.textContent = "--.-°";
         updateReachDisplay(null);
-        statusText.textContent = statusValue || "皮膚基準線付近で針を検出できません";
-        statusText.className = statusClassValue || "warn";
+        updateStatusWithSparkle(statusValue || "針を検出できません", statusClassValue || "warn");
+      }
+      return floatingData;
+    }
+
+    function updateFloatingLabel(data) {
+      const floatingLabel = document.getElementById("floatingAngleLabel");
+      if (!data || !data.active) {
+        floatingLabel.style.display = "none";
+        return;
+      }
+      
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = rect.width / canvasW;
+      const scaleY = rect.height / canvasH;
+
+      floatingLabel.style.display = "flex";
+      floatingLabel.style.left = (data.cx * scaleX) + "px";
+      floatingLabel.style.top = (data.cy * scaleY) + "px";
+
+      document.getElementById("f-angle").textContent = data.label;
+      const fReach = document.getElementById("f-reach");
+      if (data.subLabel) {
+        fReach.textContent = data.subLabel;
+        fReach.style.display = "block";
+      } else {
+        fReach.style.display = "none";
       }
     }
 
-    function saveCurrentFrame(angleValue, statusValue, statusClassValue) {
+    function saveCurrentFrame(angleValue, statusValue, statusClassValue, floatingData) {
       if (!processing) return;
-
-      const imageData = ctx.getImageData(0, 0, canvasW, canvasH);
+      hiddenCtx.drawImage(canvas, 0, 0, canvasW, canvasH);
+      const compositeData = hiddenCtx.getImageData(0, 0, canvasW, canvasH);
+      
       frameBuffer.push({
-        imageData,
+        imageData: compositeData,
         angle: angleValue,
         status: statusValue,
         statusClass: statusClassValue,
+        floatingData: floatingData,
         timestamp: new Date()
       });
-
       if (frameBuffer.length > maxBufferFrames) {
         frameBuffer.shift();
       }
-
-      updateFrameInfo();
     }
 
     function showBufferedFrame(index) {
       if (index < 0 || index >= frameBuffer.length) return;
-
       const frame = frameBuffer[index];
-      ctx.putImageData(frame.imageData, 0, 0);
-
+      ctx.putImageData(frame.imageData, 0, 0); 
       if (frame.angle !== null) {
         angleText.textContent = frame.angle.toFixed(1) + "°";
         updateReachDisplay(frame.angle);
@@ -1180,76 +1018,45 @@
         angleText.textContent = "--.-°";
         updateReachDisplay(null);
       }
-
-      statusText.textContent = (frame.status || "確認中") + "｜静止画確認中";
-      statusText.className = frame.statusClass || "paused";
-
+      updateStatusWithSparkle((frame.status || "確認中"), frame.statusClass || "paused");
       reviewIndex = index;
       frameSlider.value = index;
-
-      updateFrameInfo();
-      updateSkinInfo();
+      
+      updateFloatingLabel(frame.floatingData);
     }
 
-    function updateFrameInfo() {
-      if (paused && reviewIndex >= 0 && frameBuffer.length > 0) {
-        frameInfo.textContent = `保存フレーム：${frameBuffer.length} / ${maxBufferFrames}｜表示中：${reviewIndex + 1} / ${frameBuffer.length}`;
-      } else {
-        frameInfo.textContent = `保存フレーム：${frameBuffer.length} / ${maxBufferFrames}`;
-      }
-    }
-
-    // ------------------------------
-    // 角度計算
-    // ------------------------------
-    function getLineAngleDegFromCoords(x1, y1, x2, y2) {
-      return Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-    }
-
-    function getLineAngleDeg(p1, p2) {
-      return getLineAngleDegFromCoords(p1.x, p1.y, p2.x, p2.y);
-    }
-
+    function getLineAngleDegFromCoords(x1, y1, x2, y2) { return Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI; }
+    function getLineAngleDeg(p1, p2) { return getLineAngleDegFromCoords(p1.x, p1.y, p2.x, p2.y); }
     function normalizeAngle180(angle) {
       while (angle > 180) angle -= 360;
       while (angle < -180) angle += 360;
       return angle;
     }
-
     function calcInsertionAngle(line) {
       const needleAngle = getLineAngleDegFromCoords(line.x1, line.y1, line.x2, line.y2);
       const skinAngle = getLineAngleDeg(skinP1, skinP2);
-
       let diff = Math.abs(normalizeAngle180(needleAngle - skinAngle));
       if (diff > 90) diff = 180 - diff;
       return diff;
     }
 
-    // ------------------------------
-    // 描画
-    // ------------------------------
     function getCenterRoi() {
       const width = canvasW * centerRoiRate;
       const left = (canvasW - width) / 2;
-      const right = left + width;
-      return { left, right };
+      return { left, right: left + width };
     }
 
     function drawDetectionRoi() {
       const roi = getCenterRoi();
-
       ctx.save();
       ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
       ctx.fillRect(roi.left, 0, roi.right - roi.left, canvasH);
-
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+      ctx.strokeStyle = "rgba(138, 180, 248, 0.35)";
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
-      ctx.moveTo(roi.left, 0);
-      ctx.lineTo(roi.left, canvasH);
-      ctx.moveTo(roi.right, 0);
-      ctx.lineTo(roi.right, canvasH);
+      ctx.moveTo(roi.left, 0); ctx.lineTo(roi.left, canvasH);
+      ctx.moveTo(roi.right, 0); ctx.lineTo(roi.right, canvasH);
       ctx.stroke();
       ctx.restore();
     }
@@ -1257,57 +1064,40 @@
     function drawSkinReferenceLine() {
       ctx.save();
       const extended = getExtendedSkinLinePoints();
-
       ctx.lineWidth = 3;
-      ctx.strokeStyle = "lime";
+      ctx.strokeStyle = "#4ade80";
       ctx.setLineDash([10, 10]);
       ctx.beginPath();
-      ctx.moveTo(extended.x1, extended.y1);
-      ctx.lineTo(extended.x2, extended.y2);
+      ctx.moveTo(extended.x1, extended.y1); ctx.lineTo(extended.x2, extended.y2);
       ctx.stroke();
       ctx.setLineDash([]);
-
       ctx.lineWidth = 6;
-      ctx.strokeStyle = "lime";
+      ctx.strokeStyle = "#4ade80";
       ctx.beginPath();
-      ctx.moveTo(skinP1.x, skinP1.y);
-      ctx.lineTo(skinP2.x, skinP2.y);
+      ctx.moveTo(skinP1.x, skinP1.y); ctx.lineTo(skinP2.x, skinP2.y);
       ctx.stroke();
-
-      drawHandle(skinP1.x, skinP1.y, "L");
-      drawHandle(skinP2.x, skinP2.y, "R");
-
-
+      drawHandle(skinP1.x, skinP1.y, "L"); drawHandle(skinP2.x, skinP2.y, "R");
       ctx.restore();
     }
 
     function getExtendedSkinLinePoints() {
       const dx = skinP2.x - skinP1.x;
       const dy = skinP2.y - skinP1.y;
-
-      if (Math.abs(dx) < 1) {
-        return { x1: skinP1.x, y1: 0, x2: skinP1.x, y2: canvasH };
-      }
-
+      if (Math.abs(dx) < 1) return { x1: skinP1.x, y1: 0, x2: skinP1.x, y2: canvasH };
       const slope = dy / dx;
-      const yAtLeft = skinP1.y + slope * (0 - skinP1.x);
-      const yAtRight = skinP1.y + slope * (canvasW - skinP1.x);
-
-      return { x1: 0, y1: yAtLeft, x2: canvasW, y2: yAtRight };
+      return { x1: 0, y1: skinP1.y + slope * (0 - skinP1.x), x2: canvasW, y2: skinP1.y + slope * (canvasW - skinP1.x) };
     }
 
     function drawHandle(x, y, label) {
       ctx.save();
-      ctx.fillStyle = "lime";
+      ctx.fillStyle = "#4ade80";
       ctx.beginPath();
       ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
       ctx.fill();
-
-      ctx.strokeStyle = "black";
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.9)";
       ctx.lineWidth = 3;
       ctx.stroke();
-
-      ctx.fillStyle = "black";
+      ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
       ctx.font = "bold 16px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -1318,25 +1108,26 @@
     function drawNeedleLine(line) {
       ctx.save();
       ctx.lineWidth = 7;
-      ctx.strokeStyle = "red";
+      ctx.strokeStyle = "#9b72cb";
       ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(line.x1, line.y1);
-      ctx.lineTo(line.x2, line.y2);
+      ctx.moveTo(line.x1, line.y1); ctx.lineTo(line.x2, line.y2);
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.moveTo(line.x1, line.y1); ctx.lineTo(line.x2, line.y2);
       ctx.stroke();
       ctx.restore();
     }
 
     function drawAngleTextOnCanvas(angle, line = null) {
       ctx.save();
-
       const depthMm = getDepthMm();
       const reachMm = depthMm === null ? null : calcReachDistanceMm(depthMm, angle);
       const label = `${angle.toFixed(1)}°`;
       const subLabel = reachMm === null ? null : `到達 ${reachMm.toFixed(1)}mm`;
-      const boxWidth = subLabel ? 172 : 132;
-      const boxHeight = subLabel ? 72 : 54;
-
+      
       let center = { x: canvasW * 0.50, y: canvasH * 0.28 };
       let pointer = null;
 
@@ -1345,104 +1136,55 @@
           { x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2 },
           { x1: skinP1.x, y1: skinP1.y, x2: skinP2.x, y2: skinP2.y }
         );
-
         if (hit && hit.x >= -canvasW && hit.x <= canvasW * 2 && hit.y >= -canvasH && hit.y <= canvasH * 2) {
           pointer = hit;
         } else {
-          pointer = {
-            x: (line.x1 + line.x2) / 2,
-            y: (line.y1 + line.y2) / 2
-          };
+          pointer = { x: (line.x1 + line.x2) / 2, y: (line.y1 + line.y2) / 2 };
         }
-
         const skinUnit = getUnitVector(skinP1.x, skinP1.y, skinP2.x, skinP2.y);
         let needleUnit = getUnitVector(line.x1, line.y1, line.x2, line.y2);
-
-        // 鋭角側をそろえたうえで、鈍角側の二等分線方向を候補にする
-        if (dot(skinUnit, needleUnit) < 0) {
-          needleUnit = { x: -needleUnit.x, y: -needleUnit.y };
-        }
-
-        let obtuseDir = normalizeVector({
-          x: skinUnit.x - needleUnit.x,
-          y: skinUnit.y - needleUnit.y
-        });
-
-        if (!isFinite(obtuseDir.x) || !isFinite(obtuseDir.y)) {
-          obtuseDir = { x: -needleUnit.y, y: needleUnit.x };
-        }
-
-        // 「斜め上」を優先。候補が下向きなら反転する。
-        if (obtuseDir.y > 0) {
-          obtuseDir = { x: -obtuseDir.x, y: -obtuseDir.y };
-        }
-
-        center = {
-          x: pointer.x + obtuseDir.x * 96,
-          y: pointer.y + obtuseDir.y * 76
-        };
-
-        center.x = clamp(center.x, boxWidth / 2 + 8, canvasW - boxWidth / 2 - 8);
-        center.y = clamp(center.y, boxHeight / 2 + 92, canvasH - boxHeight / 2 - 18);
+        if (dot(skinUnit, needleUnit) < 0) needleUnit = { x: -needleUnit.x, y: -needleUnit.y };
+        
+        let obtuseDir = normalizeVector({ x: skinUnit.x - needleUnit.x, y: skinUnit.y - needleUnit.y });
+        if (!isFinite(obtuseDir.x) || !isFinite(obtuseDir.y)) obtuseDir = { x: -needleUnit.y, y: needleUnit.x };
+        if (obtuseDir.y > 0) obtuseDir = { x: -obtuseDir.x, y: -obtuseDir.y };
+        
+        center = { x: pointer.x + obtuseDir.x * 96, y: pointer.y + obtuseDir.y * 76 };
+        
+        center.x = clamp(center.x, 120, canvasW - 120);
+        center.y = clamp(center.y, 110, canvasH - 50);
       }
 
-      const x = center.x - boxWidth / 2;
-      const y = center.y - boxHeight / 2;
-
       if (pointer) {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+        ctx.strokeStyle = "rgba(138, 180, 248, 0.85)";
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(pointer.x, pointer.y);
-        ctx.lineTo(center.x, center.y + boxHeight / 2);
+        ctx.lineTo(center.x, center.y);
         ctx.stroke();
       }
 
-      ctx.fillStyle = "rgba(0, 0, 0, 0.76)";
-      roundRect(ctx, x, y, boxWidth, boxHeight, 12, true, false);
-
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-      ctx.lineWidth = 2;
-      roundRect(ctx, x, y, boxWidth, boxHeight, 12, false, true);
-
-      ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      if (subLabel) {
-        ctx.font = "bold 30px sans-serif";
-        ctx.fillText(label, center.x, center.y - 12);
-        ctx.font = "bold 18px sans-serif";
-        ctx.fillText(subLabel, center.x, center.y + 20);
-      } else {
-        ctx.font = "bold 34px sans-serif";
-        ctx.fillText(label, center.x, center.y);
-      }
-
       ctx.restore();
+      
+      return { active: true, cx: center.x, cy: center.y, label: label, subLabel: subLabel };
     }
 
     function getLineIntersection(a, b) {
-      const x1 = a.x1, y1 = a.y1, x2 = a.x2, y2 = a.y2;
-      const x3 = b.x1, y3 = b.y1, x4 = b.x2, y4 = b.y2;
-      const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      const den = (a.x1 - a.x2) * (b.y1 - b.y2) - (a.y1 - a.y2) * (b.x1 - b.x2);
       if (Math.abs(den) < 0.0001) return null;
       return {
-        x: ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den,
-        y: ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den
+        x: ((a.x1 * a.y2 - a.y1 * a.x2) * (b.x1 - b.x2) - (a.x1 - a.x2) * (b.x1 * b.y2 - b.y1 * b.x2)) / den,
+        y: ((a.x1 * a.y2 - a.y1 * a.x2) * (b.y1 - b.y2) - (a.y1 - a.y2) * (b.x1 * b.y2 - b.y1 * b.x2)) / den
       };
     }
 
     function getUnitVector(x1, y1, x2, y2) {
-      const dx = x2 - x1;
-      const dy = y2 - y1;
+      const dx = x2 - x1; const dy = y2 - y1;
       const len = Math.sqrt(dx * dx + dy * dy) || 1;
       return { x: dx / len, y: dy / len };
     }
 
-    function dot(a, b) {
-      return a.x * b.x + a.y * b.y;
-    }
+    function dot(a, b) { return a.x * b.x + a.y * b.y; }
 
     function normalizeVector(v) {
       const len = Math.sqrt(v.x * v.x + v.y * v.y);
@@ -1450,48 +1192,45 @@
       return { x: v.x / len, y: v.y / len };
     }
 
-    function roundRect(context, x, y, width, height, radius, fill, stroke) {
-      context.beginPath();
-      context.moveTo(x + radius, y);
-      context.lineTo(x + width - radius, y);
-      context.quadraticCurveTo(x + width, y, x + width, y + radius);
-      context.lineTo(x + width, y + height - radius);
-      context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      context.lineTo(x + radius, y + height);
-      context.quadraticCurveTo(x, y + height, x, y + height - radius);
-      context.lineTo(x, y + radius);
-      context.quadraticCurveTo(x, y, x + radius, y);
-      context.closePath();
-      if (fill) context.fill();
-      if (stroke) context.stroke();
-    }
-
     function getJudgeResult(angle) {
-      const target = 25;
-      const tolerance = 3;
+      const depthMm = getDepthMm();
+      const d = depthMm !== null ? depthMm : 3.0;
+
+      let minAngle, maxAngle;
+
+      if (d < 2.0) {
+        minAngle = 10; maxAngle = 15;
+      } else if (d < 3.0) {
+        minAngle = 15; maxAngle = 20;
+      } else if (d < 4.0) {
+        minAngle = 20; maxAngle = 25;
+      } else if (d < 5.0) {
+        minAngle = 22; maxAngle = 28;
+      } else if (d < 6.0) {
+        minAngle = 24; maxAngle = 29;
+      } else {
+        minAngle = 25; maxAngle = 30;
+      }
+
+      const rangeText = `${minAngle}〜${maxAngle}°`;
+      const target = (minAngle + maxAngle) / 2;
       const diff = angle - target;
 
-      if (Math.abs(diff) <= tolerance) {
-        return {
-          text: `適正範囲（25±3°）｜差 ${diff.toFixed(1)}°`,
-          className: "ok"
-        };
+      if (angle >= minAngle && angle <= maxAngle) {
+        return { text: `適正（${rangeText}）`, className: "ok" };
       }
 
-      if (diff < -tolerance) {
-        return {
-          text: `浅い：+${Math.abs(diff).toFixed(1)}° 角度を立てる`,
-          className: "warn"
-        };
+      if (angle < minAngle) {
+        return { text: `浅い：+${Math.abs(diff).toFixed(1)}° 立てる`, className: "warn" };
       }
 
-      return {
-        text: `深い：-${Math.abs(diff).toFixed(1)}° 角度を寝かせる`,
-        className: "warn"
-      };
+      if (angle > 30) {
+        return { text: `角度強い：-${Math.abs(diff).toFixed(1)}° 寝かせる`, className: "warn" };
+      }
+
+      return { text: `深い：-${Math.abs(diff).toFixed(1)}° 寝かせる`, className: "warn" };
     }
 
-    updateSkinInfo();
     updateReachDisplay(null);
   </script>
 
@@ -1504,6 +1243,5 @@
       });
     }
   </script>
-
 </body>
 </html>
