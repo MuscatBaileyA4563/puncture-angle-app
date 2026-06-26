@@ -150,10 +150,11 @@
     .ui-box {
       height: 64px;
       min-height: 64px;
-      display: flex;
+      display: grid;
+      grid-template-columns: 18px 86px minmax(0, 1fr);
       align-items: center;
-      gap: 12px;
-      padding: 0 16px;
+      column-gap: 12px;
+      padding: 0 14px;
       border-radius: 16px;
       background: var(--bg-panel);
       border: 1px solid var(--border-color);
@@ -163,31 +164,42 @@
       position: relative;
       align-self: flex-start;
       min-width: 0;
+      overflow: hidden;
     }
 
-    .sliderBox {
-      flex: 0 1 240px;
+    .sliderBox,
+    .depthBox {
+      flex: 0 0 260px;
+      width: 260px;
+      min-width: 260px;
       max-width: 260px;
-      min-width: 150px;
       color: var(--text-muted);
       font-size: 12px;
       font-weight: 700;
     }
 
-    #frameSlider { flex: 1; height: 32px; cursor: pointer; accent-color: #9b72cb; }
-
     .depthBox {
-      flex: 1 1 280px;
-      min-width: 220px;
-      max-width: 420px;
       color: #fff;
       font-size: 14px;
-      font-weight: 700;
     }
 
+    .sliderBox > span:nth-child(2),
+    .depthBox > label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #frameSlider,
     #depthSlider {
-      min-width: 80px;
+      width: 100%;
+      min-width: 0;
       height: 32px;
+      cursor: pointer;
+      accent-color: #9b72cb;
+      margin: 0 !important;
+      flex: none !important;
     }
 
     /* 下部情報パネル */
@@ -325,13 +337,27 @@
     @media (orientation: portrait), (max-width: 900px) {
       .topOverlay { gap: 8px; flex-wrap: nowrap; align-items: flex-start; overflow: hidden; }
       .buttonRow { height: 54px; gap: 8px; }
-      .ui-box { height: 54px; min-height: 54px; padding: 0 10px; }
+      .ui-box {
+        height: 54px;
+        min-height: 54px;
+        width: 190px;
+        min-width: 190px;
+        max-width: 190px;
+        grid-template-columns: 16px 74px minmax(0, 1fr);
+        column-gap: 8px;
+        padding: 0 10px;
+      }
       button { min-width: 54px; min-height: 54px; }
-      .sliderBox { flex: 0 1 150px; min-width: 110px; max-width: 170px; }
-      .sliderBox span:nth-child(2) { display: none; }
-      .depthBox { flex: 1 1 220px; min-width: 180px; max-width: none; font-size: 13px; }
-      .depthBox .material-symbols-rounded { display: none; }
-      #depthSlider { min-width: 70px; }
+      .sliderBox,
+      .depthBox {
+        flex: 0 0 190px;
+        width: 190px;
+        min-width: 190px;
+        max-width: 190px;
+        font-size: 12px;
+      }
+      #frameSlider,
+      #depthSlider { height: 30px; min-width: 0; }
       #depthLabel { font-size: 16px; }
 
       #infoPanel {
@@ -388,7 +414,7 @@
         <div class="ui-box depthBox">
           <span class="material-symbols-rounded" style="font-size: 18px; color: var(--primary);">straighten</span>
           <label for="depthSlider" style="white-space: nowrap;">深さ: <span id="depthLabel" style="font-weight: 900; font-size: 16px; color: #fff;">3.0</span> mm</label>
-          <input type="range" id="depthSlider" min="1.0" max="8.0" value="3.0" step="0.1" oninput="updateDepthFromSlider()" style="flex: 1; margin: 0 8px; accent-color: #9b72cb;" />
+          <input type="range" id="depthSlider" min="1.0" max="8.0" value="3.0" step="0.1" oninput="updateDepthFromSlider()"  />
         </div>
       </div>
 
