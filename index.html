@@ -438,10 +438,68 @@
       #depthSlider { height: 24px; }
     }
 
+    #disclaimerOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(0, 0, 0, 0.88);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    #disclaimerOverlay.hidden { display: none; }
+
+    #disclaimerBox {
+      max-width: 480px;
+      width: 100%;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 24px;
+      backdrop-filter: blur(var(--panel-blur));
+      -webkit-backdrop-filter: blur(var(--panel-blur));
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    #disclaimerBox h2 {
+      font-size: 17px;
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--warning);
+    }
+
+    #disclaimerBox p {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--text-muted);
+      margin: 0 0 10px;
+    }
+
+    #disclaimerBox button {
+      width: 100%;
+      height: 48px;
+      min-height: 48px;
+      margin-top: 8px;
+      background: var(--gemini-gradient);
+      border: none;
+      font-size: 14px;
+    }
   </style>
 </head>
 
 <body>
+  <div id="disclaimerOverlay">
+    <div id="disclaimerBox">
+      <h2><span class="material-symbols-rounded">warning</span> ご利用にあたっての注意</h2>
+      <p>本アプリが表示する角度・到達距離は、カメラ画像からの自動推定による参考値です。照明条件や体位、皮膚の状態によって誤検出・誤差が生じることがあります。</p>
+      <p>実際の穿刺角度・深さの判断は、必ず手技を行う医療従事者自身の臨床判断に基づいて行ってください。本アプリの表示のみを根拠に手技を行わないでください。</p>
+      <button type="button" onclick="acknowledgeDisclaimer()">内容を理解して開始</button>
+    </div>
+  </div>
   <div id="appShell">
     <div id="container">
       <video id="video" autoplay playsinline muted></video>
@@ -507,7 +565,7 @@
     </div>
   </div>
 
-  <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+  <script async src="./opencv.js"></script>
 
   <script>
     const video = document.getElementById("video");
@@ -530,6 +588,23 @@
     const depthSlider = document.getElementById("depthSlider");
     const depthLabel = document.getElementById("depthLabel");
 
+    (function initDisclaimer() {
+      const overlay = document.getElementById("disclaimerOverlay");
+      try {
+        if (localStorage.getItem("puncture-angle-disclaimer-ack") === "1") {
+          overlay.classList.add("hidden");
+        }
+      } catch (e) {
+        // localStorage不可の環境でもアプリ自体は使えるようにする
+      }
+    })();
+
+    function acknowledgeDisclaimer() {
+      const overlay = document.getElementById("disclaimerOverlay");
+      overlay.classList.add("hidden");
+      try { localStorage.setItem("puncture-angle-disclaimer-ack", "1"); } catch (e) {}
+    }
+
     let stream = null;
     let processing = false;
     let paused = false;
@@ -544,6 +619,17 @@
 
     let smoothedLine = null; 
     const smoothingFactor = 0.65; 
+
+    // --- 外れ値対策 / ちらつき防止用の状態 ---
+    let pendingLine = null;      // 大きく乖離した候補が連続しているか監視用
+    let pendingStreak = 0;
+    const maxJumpDeg = 12;       // これ以上の急な角度変化は一旦「保留」扱い
+    const confirmFrames = 3;     // 保留の乖離が何フレーム連続したら本採用するか
+
+    let missStreak = 0;          // 針が検出できなかった連続フレーム数
+    const missGraceFrames = 6;   // このフレーム数までは直前の検出結果を維持（表示のちらつき防止）
+
+    let lastOkState = false;     // 適正角度に入った瞬間の検知用（バイブ通知トリガー）
 
     const mirrorFix = false;
 
@@ -775,6 +861,10 @@
         lastStatusValue = "";
         lastStatusClassValue = "";
         smoothedLine = null; 
+        pendingLine = null;
+        pendingStreak = 0;
+        missStreak = 0;
+        lastOkState = false;
 
         processing = true;
         paused = false;
@@ -813,6 +903,10 @@
       lastBestLine = null;
       lastAngleValue = null;
       smoothedLine = null;
+      pendingLine = null;
+      pendingStreak = 0;
+      missStreak = 0;
+      lastOkState = false;
 
       angleText.textContent = "--.-°";
       updateReachDisplay(null);
@@ -969,6 +1063,8 @@
         }
 
         if (bestLine) {
+          missStreak = 0;
+
           if (bestLine.y1 > bestLine.y2) {
             let tx = bestLine.x1, ty = bestLine.y1;
             bestLine.x1 = bestLine.x2; bestLine.y1 = bestLine.y2;
@@ -976,13 +1072,42 @@
           }
 
           if (!smoothedLine) {
+            // 初回検出はそのまま採用
             smoothedLine = { ...bestLine };
+            pendingLine = null;
+            pendingStreak = 0;
           } else {
-            const alpha = smoothingFactor;
-            smoothedLine.x1 = bestLine.x1 * alpha + smoothedLine.x1 * (1 - alpha);
-            smoothedLine.y1 = bestLine.y1 * alpha + smoothedLine.y1 * (1 - alpha);
-            smoothedLine.x2 = bestLine.x2 * alpha + smoothedLine.x2 * (1 - alpha);
-            smoothedLine.y2 = bestLine.y2 * alpha + smoothedLine.y2 * (1 - alpha);
+            const currentAngle = calcInsertionAngle(smoothedLine);
+            const jump = Math.abs(bestLine.angle - currentAngle);
+
+            if (jump <= maxJumpDeg) {
+              // 通常範囲の変化：指数移動平均で滑らかに追従
+              const alpha = smoothingFactor;
+              smoothedLine.x1 = bestLine.x1 * alpha + smoothedLine.x1 * (1 - alpha);
+              smoothedLine.y1 = bestLine.y1 * alpha + smoothedLine.y1 * (1 - alpha);
+              smoothedLine.x2 = bestLine.x2 * alpha + smoothedLine.x2 * (1 - alpha);
+              smoothedLine.y2 = bestLine.y2 * alpha + smoothedLine.y2 * (1 - alpha);
+              pendingLine = null;
+              pendingStreak = 0;
+            } else {
+              // 急な乖離：単発フレームのノイズ（影・シワ等の誤検出）の可能性があるため
+              // 同じ角度域の候補が connfirmFrames 回連続するまでは採用を保留し、
+              // 保留中は直前の安定した角度をそのまま表示し続ける
+              if (pendingLine && Math.abs(pendingLine.angle - bestLine.angle) <= maxJumpDeg) {
+                pendingStreak++;
+              } else {
+                pendingLine = bestLine;
+                pendingStreak = 1;
+              }
+
+              if (pendingStreak >= confirmFrames) {
+                // 複数フレームにわたって同じ新しい角度が続いた＝実際に角度が変わったと判断し、切り替える
+                smoothedLine = { ...bestLine };
+                pendingLine = null;
+                pendingStreak = 0;
+              }
+              // confirmFrames未満の間は smoothedLine を更新せず、前フレームの値を維持する
+            }
           }
 
           angleValue = calcInsertionAngle(smoothedLine);
@@ -991,12 +1116,31 @@
           statusClassValue = judge.className;
           lastBestLine = smoothedLine;
         } else {
-          smoothedLine = null; 
-          angleValue = null;
-          statusValue = "針を検出できません";
-          statusClassValue = "warn";
-          lastBestLine = null;
+          missStreak++;
+
+          if (smoothedLine && missStreak <= missGraceFrames) {
+            // 数フレームだけの検出ロストは表示をちらつかせず、直前の結果を維持する
+            angleValue = calcInsertionAngle(smoothedLine);
+            const judge = getJudgeResult(angleValue);
+            statusValue = judge.text;
+            statusClassValue = judge.className;
+            lastBestLine = smoothedLine;
+          } else {
+            smoothedLine = null;
+            pendingLine = null;
+            pendingStreak = 0;
+            angleValue = null;
+            statusValue = "針を検出できません";
+            statusClassValue = "warn";
+            lastBestLine = null;
+          }
         }
+
+        // 適正角度域に「入った瞬間」だけ短くバイブレーションで通知（穿刺中は画面注視が難しいため）
+        if (statusClassValue === "ok" && !lastOkState && navigator.vibrate) {
+          navigator.vibrate(60);
+        }
+        lastOkState = (statusClassValue === "ok");
 
         lastAngleValue = angleValue;
         lastStatusValue = statusValue;
