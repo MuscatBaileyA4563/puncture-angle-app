@@ -565,6 +565,7 @@
     </div>
   </div>
 
+  <script async src="./opencv.js"></script>
   <script src="./ort.wasm.min.js"></script>
 
   <script>
@@ -620,12 +621,13 @@
     let yoloReady = false;
     let yoloBusy = false;
     let yoloResult = null; // {x1,y1,x2,y2,conf,root:{x,y},tip:{x,y}} canvas(960x540)座標系。null=未検出
+    let yoloHistory = []; // 直近2回分の{root,tip,t}。速度を推定して表示の遅れを見た目上減らすために使う
     let yoloFrameCounter = 0;
     const YOLO_MODEL_PATH = "./best.onnx";
     const YOLO_INPUT_W = 960;
     const YOLO_INPUT_H = 544; // 学習時のexport解像度(imgsz=[544,960])に合わせる
     const yoloConfThreshold = 0.35;
-    const yoloRefreshEveryNFrames = 3; // 推論コストが高いため間引いて実行。CPU負荷が高い場合は要調整
+    const yoloRefreshEveryNFrames = 10; // YOLOは「だいたいの位置・向き」を教える役割に縮小。毎フレームの精密化はHoughが担当する
     
     let lastBestLine = null;
     let lastAngleValue = null;
@@ -765,10 +767,134 @@
         const results = await yoloSession.run(feeds);
         const output = results[yoloSession.outputNames[0]];
         yoloResult = parseYoloOutput(output, scale, padX, padY, sourceCanvas.width, sourceCanvas.height);
+
+        if (yoloResult) {
+          yoloHistory.push({ root: yoloResult.root, tip: yoloResult.tip, t: performance.now() });
+          if (yoloHistory.length > 2) yoloHistory.shift();
+        } else {
+          yoloHistory = [];
+        }
       } catch (e) {
         console.warn("YOLO推論でエラーが発生しました。次回の更新まで検出結果を保持します:", e);
       } finally {
         yoloBusy = false;
+      }
+    }
+
+    // 直近2回の検出結果から根元・針先それぞれの移動速度を推定し、
+    // 「今この瞬間」の位置を外挿する。YOLOの推論待ち時間による見た目の遅れを軽減するための処理で、
+    // 実際の検出精度そのものを上げるものではない(速度推定が外れれば逆にズレる可能性もある)。
+    const yoloExtrapolateMaxMs = 500; // これより古い検出结果には基づいて外挿しない(暴走防止)
+
+    function getExtrapolatedNeedleLine() {
+      if (!yoloResult) return null;
+
+      if (yoloHistory.length < 2) {
+        return { x1: yoloResult.root.x, y1: yoloResult.root.y, x2: yoloResult.tip.x, y2: yoloResult.tip.y };
+      }
+
+      const [prev, latest] = yoloHistory;
+      const dt = latest.t - prev.t;
+      const elapsed = Math.min(performance.now() - latest.t, yoloExtrapolateMaxMs);
+
+      if (dt <= 0) {
+        return { x1: latest.root.x, y1: latest.root.y, x2: latest.tip.x, y2: latest.tip.y };
+      }
+
+      const vRootX = (latest.root.x - prev.root.x) / dt;
+      const vRootY = (latest.root.y - prev.root.y) / dt;
+      const vTipX = (latest.tip.x - prev.tip.x) / dt;
+      const vTipY = (latest.tip.y - prev.tip.y) / dt;
+
+      return {
+        x1: latest.root.x + vRootX * elapsed,
+        y1: latest.root.y + vRootY * elapsed,
+        x2: latest.tip.x + vTipX * elapsed,
+        y2: latest.tip.y + vTipY * elapsed
+      };
+    }
+
+    // --- YOLOのアンカー線を、OpenCV(Hough)で近くの実エッジにスナップさせて精密化する ---
+    // YOLOは「だいたいの位置・向き」を教えるだけ(更新頻度も低い)。実際の細かい位置合わせは
+    // 毎フレーム軽量なCanny/Houghで、アンカー線に近い候補だけを対象に行う。
+    // opencv.jsが未読込/エラー時は、アンカー線(YOLOの外挿値)をそのまま返す(精度は落ちるが検出自体は止めない)。
+    const houghRefinePadding = 40;      // アンカー線のbboxからどれだけ外側まで探索するか(px)
+    const houghRefineMaxAngleDiff = 15; // アンカーとの角度差がこれを超える候補は無視(度)
+    const houghRefineMaxDist = 60;      // アンカーの中点からの距離がこれを超える候補は無視(px)
+
+    function refineLineWithHough(anchorLine) {
+      if (typeof cv === "undefined" || !cv.Mat) return anchorLine;
+
+      let srcFull = null, gray = null, blur = null, edges = null, lines = null, croppedEdges = null;
+      try {
+        srcFull = cv.imread(hiddenCanvas);
+        gray = new cv.Mat();
+        blur = new cv.Mat();
+        edges = new cv.Mat();
+        lines = new cv.Mat();
+
+        cv.cvtColor(srcFull, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
+        cv.Canny(blur, edges, 55, 155);
+
+        const minX = Math.min(anchorLine.x1, anchorLine.x2), maxX = Math.max(anchorLine.x1, anchorLine.x2);
+        const minY = Math.min(anchorLine.y1, anchorLine.y2), maxY = Math.max(anchorLine.y1, anchorLine.y2);
+        const rx = Math.max(0, Math.floor(minX - houghRefinePadding));
+        const ry = Math.max(0, Math.floor(minY - houghRefinePadding));
+        const rw = Math.min(canvasW, Math.ceil(maxX + houghRefinePadding)) - rx;
+        const rh = Math.min(canvasH, Math.ceil(maxY + houghRefinePadding)) - ry;
+
+        let houghInput = edges, offX = 0, offY = 0;
+        if (rw > 10 && rh > 10) {
+          const rect = new cv.Rect(rx, ry, rw, rh);
+          croppedEdges = edges.roi(rect);
+          houghInput = croppedEdges;
+          offX = rx; offY = ry;
+        }
+
+        cv.HoughLinesP(houghInput, lines, 1, Math.PI / 180, 40, 30, 15);
+
+        const anchorAngleDeg = getLineAngleDegFromCoords(anchorLine.x1, anchorLine.y1, anchorLine.x2, anchorLine.y2);
+        const anchorMid = { x: (anchorLine.x1 + anchorLine.x2) / 2, y: (anchorLine.y1 + anchorLine.y2) / 2 };
+
+        let best = null, bestCost = Infinity;
+        for (let i = 0; i < lines.rows; i++) {
+          const x1 = lines.data32S[i * 4] + offX, y1 = lines.data32S[i * 4 + 1] + offY;
+          const x2 = lines.data32S[i * 4 + 2] + offX, y2 = lines.data32S[i * 4 + 3] + offY;
+
+          const candAngleDeg = getLineAngleDegFromCoords(x1, y1, x2, y2);
+          let angleDiff = Math.abs(normalizeAngle180(candAngleDeg - anchorAngleDeg));
+          if (angleDiff > 90) angleDiff = 180 - angleDiff; // 直線自体には向きが無いので反転も同一視する
+
+          const mid = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+          const distToAnchorMid = distance(mid, anchorMid);
+
+          if (angleDiff > houghRefineMaxAngleDiff || distToAnchorMid > houghRefineMaxDist) continue;
+
+          const cost = angleDiff + distToAnchorMid * 0.5;
+          if (cost < bestCost) { bestCost = cost; best = { x1, y1, x2, y2 }; }
+        }
+
+        if (!best) return anchorLine; // 近い候補が無ければYOLOの推定値をそのまま使う
+
+        // 根元/針先の向きは、YOLOのアンカー線に近い方の端点で対応付ける
+        const dRootTo1 = distance({ x: best.x1, y: best.y1 }, { x: anchorLine.x1, y: anchorLine.y1 });
+        const dRootTo2 = distance({ x: best.x2, y: best.y2 }, { x: anchorLine.x1, y: anchorLine.y1 });
+
+        return dRootTo1 <= dRootTo2
+          ? { x1: best.x1, y1: best.y1, x2: best.x2, y2: best.y2 }
+          : { x1: best.x2, y1: best.y2, x2: best.x1, y2: best.y1 };
+
+      } catch (e) {
+        console.warn("Houghによる微調整でエラーが発生したため、YOLOの推定値をそのまま使います:", e);
+        return anchorLine;
+      } finally {
+        if (srcFull) srcFull.delete();
+        if (gray) gray.delete();
+        if (blur) blur.delete();
+        if (edges) edges.delete();
+        if (lines) lines.delete();
+        if (croppedEdges) croppedEdges.delete();
       }
     }
 
@@ -961,6 +1087,8 @@
         lastStatusClassValue = "";
         missStreak = 0;
         lastOkState = false;
+        yoloResult = null;
+        yoloHistory = [];
 
         processing = true;
         paused = false;
@@ -1000,6 +1128,8 @@
       lastAngleValue = null;
       missStreak = 0;
       lastOkState = false;
+      yoloResult = null;
+      yoloHistory = [];
 
       angleText.textContent = "--.-°";
       updateReachDisplay(null);
@@ -1093,12 +1223,11 @@
       let statusClassValue = "";
 
       try {
-        // YOLOのキーポイント(根元・針先)から直接、角度を計算する。Houghのような画像処理は行わない。
-        if (yoloResult) {
-          const line = {
-            x1: yoloResult.root.x, y1: yoloResult.root.y,
-            x2: yoloResult.tip.x, y2: yoloResult.tip.y
-          };
+        // YOLOのキーポイント(根元・針先)を、直近の動きから外挿した「今この瞬間」の推定アンカー位置とし、
+        // そこから近い実エッジをHoughで探して精密化する(ハイブリッド方式)。
+        const anchorLine = getExtrapolatedNeedleLine();
+        const line = anchorLine ? refineLineWithHough(anchorLine) : null;
+        if (line) {
           const insertionAngle = calcInsertionAngle(line);
 
           // モデルの誤検出を弾くための妥当性チェック(範囲外は「検出できません」扱いにする)

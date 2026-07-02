@@ -1,10 +1,11 @@
-const CACHE_NAME = "puncture-angle-app-v5"; // v5: opencv.js廃止、YOLO11n-pose(キーポイント版)モデルに切替
+const CACHE_NAME = "puncture-angle-app-v6"; // v6: YOLO(pose)+Hough ハイブリッド方式に変更、opencv.js復活
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
+  "./opencv.js",
   "./ort.wasm.min.js",
   "./ort-wasm-simd-threaded.mjs",
   "./ort-wasm-simd-threaded.wasm",
