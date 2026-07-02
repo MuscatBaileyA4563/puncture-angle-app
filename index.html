@@ -617,11 +617,13 @@
     let lastStatusValue = "";
     let lastStatusClassValue = "";
 
-    let smoothedLine = null; 
+    // 描画する線は毎フレームの生の検出結果(bestLine)をそのまま使う（映像とズレないように）。
+    // スムージング／外れ値対策は「角度の数値」だけに対してスカラーでかける。
+    let smoothedAngle = null;
     const smoothingFactor = 0.65; 
 
-    // --- 外れ値対策 / ちらつき防止用の状態 ---
-    let pendingLine = null;      // 大きく乖離した候補が連続しているか監視用
+    // --- 数値表示の外れ値対策 / ちらつき防止用の状態 ---
+    let pendingAngle = null;     // 大きく乖離した候補が連続しているか監視用
     let pendingStreak = 0;
     const maxJumpDeg = 12;       // これ以上の急な角度変化は一旦「保留」扱い
     const confirmFrames = 3;     // 保留の乖離が何フレーム連続したら本採用するか
@@ -860,8 +862,8 @@
         lastAngleValue = null;
         lastStatusValue = "";
         lastStatusClassValue = "";
-        smoothedLine = null; 
-        pendingLine = null;
+        smoothedAngle = null; 
+        pendingAngle = null;
         pendingStreak = 0;
         missStreak = 0;
         lastOkState = false;
@@ -902,8 +904,8 @@
       reviewIndex = -1;
       lastBestLine = null;
       lastAngleValue = null;
-      smoothedLine = null;
-      pendingLine = null;
+      smoothedAngle = null;
+      pendingAngle = null;
       pendingStreak = 0;
       missStreak = 0;
       lastOkState = false;
@@ -1071,63 +1073,58 @@
             bestLine.x2 = tx; bestLine.y2 = ty;
           }
 
-          if (!smoothedLine) {
-            // 初回検出はそのまま採用
-            smoothedLine = { ...bestLine };
-            pendingLine = null;
+          // 数値（角度）だけスカラーでスムージング＋外れ値対策。線そのものは常に生の検出結果を描画するので映像とズレない。
+          if (smoothedAngle === null) {
+            smoothedAngle = bestLine.angle;
+            pendingAngle = null;
             pendingStreak = 0;
           } else {
-            const currentAngle = calcInsertionAngle(smoothedLine);
-            const jump = Math.abs(bestLine.angle - currentAngle);
+            const jump = Math.abs(bestLine.angle - smoothedAngle);
 
             if (jump <= maxJumpDeg) {
-              // 通常範囲の変化：指数移動平均で滑らかに追従
-              const alpha = smoothingFactor;
-              smoothedLine.x1 = bestLine.x1 * alpha + smoothedLine.x1 * (1 - alpha);
-              smoothedLine.y1 = bestLine.y1 * alpha + smoothedLine.y1 * (1 - alpha);
-              smoothedLine.x2 = bestLine.x2 * alpha + smoothedLine.x2 * (1 - alpha);
-              smoothedLine.y2 = bestLine.y2 * alpha + smoothedLine.y2 * (1 - alpha);
-              pendingLine = null;
+              // 通常範囲の変化：指数移動平均で数値を滑らかに追従させる
+              smoothedAngle = bestLine.angle * smoothingFactor + smoothedAngle * (1 - smoothingFactor);
+              pendingAngle = null;
               pendingStreak = 0;
             } else {
               // 急な乖離：単発フレームのノイズ（影・シワ等の誤検出）の可能性があるため
-              // 同じ角度域の候補が connfirmFrames 回連続するまでは採用を保留し、
-              // 保留中は直前の安定した角度をそのまま表示し続ける
-              if (pendingLine && Math.abs(pendingLine.angle - bestLine.angle) <= maxJumpDeg) {
+              // 同じ角度域の候補が confirmFrames 回連続するまでは数値の採用を保留する
+              // （線の描画自体は下で常に生の bestLine を使うので、保留中も見た目はズレない）
+              if (pendingAngle !== null && Math.abs(pendingAngle - bestLine.angle) <= maxJumpDeg) {
                 pendingStreak++;
               } else {
-                pendingLine = bestLine;
+                pendingAngle = bestLine.angle;
                 pendingStreak = 1;
               }
 
               if (pendingStreak >= confirmFrames) {
                 // 複数フレームにわたって同じ新しい角度が続いた＝実際に角度が変わったと判断し、切り替える
-                smoothedLine = { ...bestLine };
-                pendingLine = null;
+                smoothedAngle = bestLine.angle;
+                pendingAngle = null;
                 pendingStreak = 0;
               }
-              // confirmFrames未満の間は smoothedLine を更新せず、前フレームの値を維持する
+              // confirmFrames未満の間は smoothedAngle（表示数値）を更新せず、前フレームの値を維持する
             }
           }
 
-          angleValue = calcInsertionAngle(smoothedLine);
+          angleValue = smoothedAngle;
           const judge = getJudgeResult(angleValue);
           statusValue = judge.text;
           statusClassValue = judge.className;
-          lastBestLine = smoothedLine;
+          lastBestLine = bestLine; // 描画は常に「今この瞬間」の生の検出線
         } else {
           missStreak++;
 
-          if (smoothedLine && missStreak <= missGraceFrames) {
+          if (lastBestLine && smoothedAngle !== null && missStreak <= missGraceFrames) {
             // 数フレームだけの検出ロストは表示をちらつかせず、直前の結果を維持する
-            angleValue = calcInsertionAngle(smoothedLine);
+            // （lastBestLineは前フレームの生の線のまま＝新規更新はしない）
+            angleValue = smoothedAngle;
             const judge = getJudgeResult(angleValue);
             statusValue = judge.text;
             statusClassValue = judge.className;
-            lastBestLine = smoothedLine;
           } else {
-            smoothedLine = null;
-            pendingLine = null;
+            smoothedAngle = null;
+            pendingAngle = null;
             pendingStreak = 0;
             angleValue = null;
             statusValue = "針を検出できません";
