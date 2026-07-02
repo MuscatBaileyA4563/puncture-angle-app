@@ -617,19 +617,9 @@
     let lastStatusValue = "";
     let lastStatusClassValue = "";
 
-    // 描画する線は毎フレームの生の検出結果(bestLine)をそのまま使う（映像とズレないように）。
-    // スムージング／外れ値対策は「角度の数値」だけに対してスカラーでかける。
-    let smoothedAngle = null;
-    const smoothingFactor = 0.65; 
-
-    // --- 数値表示の外れ値対策 / ちらつき防止用の状態 ---
-    let pendingAngle = null;     // 大きく乖離した候補が連続しているか監視用
-    let pendingStreak = 0;
-    const maxJumpDeg = 12;       // これ以上の急な角度変化は一旦「保留」扱い
-    const confirmFrames = 3;     // 保留の乖離が何フレーム連続したら本採用するか
-
+    // 移動平均・平滑化は行わない。角度は毎フレームの生の検出値をそのまま表示する（線とのズレを防ぐため）。
     let missStreak = 0;          // 針が検出できなかった連続フレーム数
-    const missGraceFrames = 6;   // このフレーム数までは直前の検出結果を維持（表示のちらつき防止）
+    const missGraceFrames = 6;   // このフレーム数までは直前の検出結果を維持（表示のちらつき防止。値の平均化はしない）
 
     let lastOkState = false;     // 適正角度に入った瞬間の検知用（バイブ通知トリガー）
 
@@ -657,6 +647,14 @@
 
     const minNeedleAngle = 2;
     const maxNeedleAngle = 75;
+
+    // --- 色・輝度による事前フィルタ（誤検出低減） ---
+    // 針（金属）は肌・ドレープと比べて彩度が低く、輝度が高い(反射光)傾向を利用し、
+    // Cannyエッジのうち「彩度が高い/暗い」肌色・布地由来のエッジを事前に除外する。
+    // 照明条件によっては要調整（暗い部屋ではmetallicValMinを下げる等）。
+    const metallicSatMax = 80;    // これ以下の彩度(0-255)のみ候補にする
+    const metallicValMin = 80;    // これ以上の明度(0-255)のみ候補にする
+    const metallicMaskDilate = 5; // マスク膨張のカーネルサイズ(px)。針エッジがマスク境界で消えるのを防ぐ
 
     function waitForOpenCV() {
       if (window.cv && cv.Mat) {
@@ -862,9 +860,6 @@
         lastAngleValue = null;
         lastStatusValue = "";
         lastStatusClassValue = "";
-        smoothedAngle = null; 
-        pendingAngle = null;
-        pendingStreak = 0;
         missStreak = 0;
         lastOkState = false;
 
@@ -904,9 +899,6 @@
       reviewIndex = -1;
       lastBestLine = null;
       lastAngleValue = null;
-      smoothedAngle = null;
-      pendingAngle = null;
-      pendingStreak = 0;
       missStreak = 0;
       lastOkState = false;
 
@@ -1005,6 +997,15 @@
       let edges = new cv.Mat();
       let lines = new cv.Mat();
 
+      let rgb = new cv.Mat();
+      let hsv = new cv.Mat();
+      let metallicMask = new cv.Mat();
+      let dilatedMask = new cv.Mat();
+      let maskedEdges = new cv.Mat();
+      let dilateKernel = null;
+      let lowMetallic = null;
+      let highMetallic = null;
+
       let bestLine = null;
       let angleValue = null;
       let statusValue = "";
@@ -1015,8 +1016,24 @@
         cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
         cv.Canny(blur, edges, 55, 155);
 
+        // --- 色・輝度による事前フィルタ ---
+        // 針(金属)は肌・ドレープ等に比べて彩度が低く輝度が高い(反射)傾向があるため、
+        // その条件に合わない領域のCannyエッジを除外し、Hough変換に渡す候補を絞り込む。
+        cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
+        cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+
+        lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin]);
+        highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255]);
+        cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
+
+        // Cannyのエッジはマスク境界の数px外側にずれることがあるため、マスクを少し膨張させて拾い漏れを防ぐ
+        dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
+        cv.dilate(metallicMask, dilatedMask, dilateKernel);
+
+        cv.bitwise_and(edges, dilatedMask, maskedEdges);
+
         cv.HoughLinesP(
-          edges,
+          maskedEdges,
           lines,
           1,
           Math.PI / 180,
@@ -1073,59 +1090,22 @@
             bestLine.x2 = tx; bestLine.y2 = ty;
           }
 
-          // 数値（角度）だけスカラーでスムージング＋外れ値対策。線そのものは常に生の検出結果を描画するので映像とズレない。
-          if (smoothedAngle === null) {
-            smoothedAngle = bestLine.angle;
-            pendingAngle = null;
-            pendingStreak = 0;
-          } else {
-            const jump = Math.abs(bestLine.angle - smoothedAngle);
-
-            if (jump <= maxJumpDeg) {
-              // 通常範囲の変化：指数移動平均で数値を滑らかに追従させる
-              smoothedAngle = bestLine.angle * smoothingFactor + smoothedAngle * (1 - smoothingFactor);
-              pendingAngle = null;
-              pendingStreak = 0;
-            } else {
-              // 急な乖離：単発フレームのノイズ（影・シワ等の誤検出）の可能性があるため
-              // 同じ角度域の候補が confirmFrames 回連続するまでは数値の採用を保留する
-              // （線の描画自体は下で常に生の bestLine を使うので、保留中も見た目はズレない）
-              if (pendingAngle !== null && Math.abs(pendingAngle - bestLine.angle) <= maxJumpDeg) {
-                pendingStreak++;
-              } else {
-                pendingAngle = bestLine.angle;
-                pendingStreak = 1;
-              }
-
-              if (pendingStreak >= confirmFrames) {
-                // 複数フレームにわたって同じ新しい角度が続いた＝実際に角度が変わったと判断し、切り替える
-                smoothedAngle = bestLine.angle;
-                pendingAngle = null;
-                pendingStreak = 0;
-              }
-              // confirmFrames未満の間は smoothedAngle（表示数値）を更新せず、前フレームの値を維持する
-            }
-          }
-
-          angleValue = smoothedAngle;
+          // 移動平均は使わず、このフレームで検出した生の角度をそのまま採用する（線と数値のズレを防ぐ）
+          angleValue = bestLine.angle;
           const judge = getJudgeResult(angleValue);
           statusValue = judge.text;
           statusClassValue = judge.className;
-          lastBestLine = bestLine; // 描画は常に「今この瞬間」の生の検出線
+          lastBestLine = bestLine;
         } else {
           missStreak++;
 
-          if (lastBestLine && smoothedAngle !== null && missStreak <= missGraceFrames) {
-            // 数フレームだけの検出ロストは表示をちらつかせず、直前の結果を維持する
-            // （lastBestLineは前フレームの生の線のまま＝新規更新はしない）
-            angleValue = smoothedAngle;
+          if (lastBestLine && lastAngleValue !== null && missStreak <= missGraceFrames) {
+            // 数フレームだけの検出ロストは表示をちらつかせず、直前の値をそのまま維持する（平均化はしない）
+            angleValue = lastAngleValue;
             const judge = getJudgeResult(angleValue);
             statusValue = judge.text;
             statusClassValue = judge.className;
           } else {
-            smoothedAngle = null;
-            pendingAngle = null;
-            pendingStreak = 0;
             angleValue = null;
             statusValue = "針を検出できません";
             statusClassValue = "warn";
@@ -1152,6 +1132,10 @@
         console.error(e);
       } finally {
         srcFull.delete(); gray.delete(); blur.delete(); edges.delete(); lines.delete();
+        rgb.delete(); hsv.delete(); metallicMask.delete(); dilatedMask.delete(); maskedEdges.delete();
+        if (dilateKernel) dilateKernel.delete();
+        if (lowMetallic) lowMetallic.delete();
+        if (highMetallic) highMetallic.delete();
       }
 
       animationId = requestAnimationFrame(processFrame);
