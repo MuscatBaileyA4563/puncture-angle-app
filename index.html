@@ -628,7 +628,7 @@
     const YOLO_INPUT_H = 544; // 学習時のexport解像度(imgsz=[544,960])に合わせる
     const yoloConfThreshold = 0.35;
     const yoloRoiPadding = 60;          // YOLOのbboxに対して、Hough候補をどれだけ外側まで許容するか(px)
-    const yoloRefreshEveryNFrames = 15; // 推論コストが高いため、数フレームに1回だけ更新する
+    const yoloRefreshEveryNFrames = 8; // Houghが完全にYOLOのROI頼りになったため、以前より頻度を上げて反応を速くする
     
     let lastBestLine = null;
     let lastAngleValue = null;
@@ -1133,17 +1133,19 @@
       let statusClassValue = "";
 
       try {
-        cv.cvtColor(srcFull, gray, cv.COLOR_RGBA2GRAY);
-        cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
-        cv.Canny(blur, edges, 55, 155);
-
-        // YOLOが認識できているフレームは、その範囲(+padding)だけを切り出してHoughを実行する。
-        // 画面全体を毎回スキャンするより高速な上、範囲外の紛らわしい線を最初から候補にしない。
-        // YOLOが未検出/未読み込みのフレームは、従来通り画面全体に対してHoughを実行する(フォールバック)。
-        let houghInput = edges;
-        let houghOffsetX = 0, houghOffsetY = 0;
-
+        // YOLOが認識できていないフレームでは、Hough検出自体を一切行わない。
+        // 以前は画面全体に対するフォールバック検出を行っていたが、誤検出が目立つため撤廃した。
+        // YOLOが「ここに針がある」と言えたフレームだけ、その範囲内でHoughによる直線フィットを行う。
         if (yoloRoi) {
+          cv.cvtColor(srcFull, gray, cv.COLOR_RGBA2GRAY);
+          cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
+          cv.Canny(blur, edges, 55, 155);
+
+          // YOLOの範囲(+padding)だけを切り出してHoughを実行する。
+          // 画面全体を毎回スキャンするより高速な上、範囲外の紛らわしい線は最初から候補にならない。
+          let houghInput = edges;
+          let houghOffsetX = 0, houghOffsetY = 0;
+
           const rx = Math.max(0, Math.floor(yoloRoi.x1 - yoloRoiPadding));
           const ry = Math.max(0, Math.floor(yoloRoi.y1 - yoloRoiPadding));
           const rw = Math.min(canvasW, Math.ceil(yoloRoi.x2 + yoloRoiPadding)) - rx;
@@ -1156,120 +1158,117 @@
             houghOffsetX = rx;
             houghOffsetY = ry;
           }
-        }
 
-        cv.HoughLinesP(
-          houghInput,
-          lines,
-          1,
-          Math.PI / 180,
-          60, 
-          50, 
-          15
-        );
+          cv.HoughLinesP(
+            houghInput,
+            lines,
+            1,
+            Math.PI / 180,
+            60, 
+            50, 
+            15
+          );
 
-        // --- 色・輝度による「加点」用マスク（失敗しても検出自体には絶対に影響させない）---
-        // 針(金属)は肌・ドレープ等に比べて彩度が低く輝度が高い(反射)傾向があるため、
-        // その条件に合う候補線のスコアを上げる。ここで何か例外が起きても、
-        // metallicRatioAlongLine が「常に0.5(ニュートラル=加点も減点もしない)」を返す関数に
-        // フォールバックするだけで、下の検出ロジックには一切波及しない。
-        let metallicRatioAlongLine = () => 0.5;
-        let rgb = null, hsv = null, metallicMask = null, dilatedMask = null;
-        let lowMetallic = null, highMetallic = null, dilateKernel = null;
+          // --- 色・輝度による「加点」用マスク（失敗しても検出自体には絶対に影響させない）---
+          // 針(金属)は肌・ドレープ等に比べて彩度が低く輝度が高い(反射)傾向があるため、
+          // その条件に合う候補線のスコアを上げる。ここで何か例外が起きても、
+          // metallicRatioAlongLine が「常に0.5(ニュートラル=加点も減点もしない)」を返す関数に
+          // フォールバックするだけで、下の検出ロジックには一切波及しない。
+          let metallicRatioAlongLine = () => 0.5;
+          let rgb = null, hsv = null, metallicMask = null, dilatedMask = null;
+          let lowMetallic = null, highMetallic = null, dilateKernel = null;
 
-        try {
-          rgb = new cv.Mat();
-          hsv = new cv.Mat();
-          metallicMask = new cv.Mat();
-          dilatedMask = new cv.Mat();
+          try {
+            rgb = new cv.Mat();
+            hsv = new cv.Mat();
+            metallicMask = new cv.Mat();
+            dilatedMask = new cv.Mat();
 
-          cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
-          cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+            cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
+            cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
 
-          lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin, 0]);
-          highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255, 255]);
-          cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
+            lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin, 0]);
+            highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255, 255]);
+            cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
 
-          dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
-          cv.dilate(metallicMask, dilatedMask, dilateKernel);
+            dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
+            cv.dilate(metallicMask, dilatedMask, dilateKernel);
 
-          const maskData = dilatedMask.data; // Uint8Array, 1ch, 0 or 255
-          const maskCols = dilatedMask.cols;
-          const maskRows = dilatedMask.rows;
+            const maskData = dilatedMask.data; // Uint8Array, 1ch, 0 or 255
+            const maskCols = dilatedMask.cols;
+            const maskRows = dilatedMask.rows;
 
-          metallicRatioAlongLine = function(x1, y1, x2, y2) {
-            const sampleCount = 8;
-            let hit = 0;
-            for (let s = 0; s <= sampleCount; s++) {
-              const t = s / sampleCount;
-              const px = Math.round(x1 + (x2 - x1) * t);
-              const py = Math.round(y1 + (y2 - y1) * t);
-              if (px < 0 || px >= maskCols || py < 0 || py >= maskRows) continue;
-              if (maskData[py * maskCols + px] > 0) hit++;
+            metallicRatioAlongLine = function(x1, y1, x2, y2) {
+              const sampleCount = 8;
+              let hit = 0;
+              for (let s = 0; s <= sampleCount; s++) {
+                const t = s / sampleCount;
+                const px = Math.round(x1 + (x2 - x1) * t);
+                const py = Math.round(y1 + (y2 - y1) * t);
+                if (px < 0 || px >= maskCols || py < 0 || py >= maskRows) continue;
+                if (maskData[py * maskCols + px] > 0) hit++;
+              }
+              return hit / (sampleCount + 1);
+            };
+            colorFilterFailStreak = 0;
+          } catch (colorErr) {
+            console.warn("色フィルタでエラーが発生したため、加点なし(ニュートラル)で継続します:", colorErr);
+            metallicRatioAlongLine = () => 0.5;
+            colorFilterFailStreak++;
+          } finally {
+            if (rgb) rgb.delete();
+            if (hsv) hsv.delete();
+            if (metallicMask) metallicMask.delete();
+            if (dilatedMask) dilatedMask.delete();
+            if (lowMetallic) lowMetallic.delete();
+            if (highMetallic) highMetallic.delete();
+            if (dilateKernel) dilateKernel.delete();
+          }
+
+          let bestScore = 0;
+          const roi = getCenterRoi();
+
+          for (let i = 0; i < lines.rows; i++) {
+            // houghInputが切り出しMatの場合、座標はそのMat内でのローカル座標なのでオフセットを足して
+            // canvas全体の座標系に戻す
+            const x1 = lines.data32S[i * 4] + houghOffsetX;
+            const y1 = lines.data32S[i * 4 + 1] + houghOffsetY;
+            const x2 = lines.data32S[i * 4 + 2] + houghOffsetX;
+            const y2 = lines.data32S[i * 4 + 3] + houghOffsetY;
+
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            if (length < 45) continue;
+
+            const mid = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+            if (mid.x < roi.left || mid.x > roi.right) continue;
+
+            const signedDistToSkin = signedVerticalDistanceToSkin(mid, skinP1, skinP2);
+            const distToSkin = Math.abs(signedDistToSkin);
+
+            if (signedDistToSkin < 0) {
+              if (distToSkin > detectionBandUpperWidth) continue;
+            } else {
+              if (distToSkin > detectionBandLowerWidth) continue;
             }
-            return hit / (sampleCount + 1);
-          };
-          colorFilterFailStreak = 0;
-        } catch (colorErr) {
-          console.warn("色フィルタでエラーが発生したため、加点なし(ニュートラル)で継続します:", colorErr);
-          metallicRatioAlongLine = () => 0.5;
-          colorFilterFailStreak++;
-        } finally {
-          if (rgb) rgb.delete();
-          if (hsv) hsv.delete();
-          if (metallicMask) metallicMask.delete();
-          if (dilatedMask) dilatedMask.delete();
-          if (lowMetallic) lowMetallic.delete();
-          if (highMetallic) highMetallic.delete();
-          if (dilateKernel) dilateKernel.delete();
-        }
 
-        let bestScore = 0;
-        const roi = getCenterRoi();
+            const candidateLine = { x1, y1, x2, y2 };
+            const insertionAngle = calcInsertionAngle(candidateLine);
 
-        for (let i = 0; i < lines.rows; i++) {
-          // houghInputが切り出しMatの場合、座標はそのMat内でのローカル座標なのでオフセットを足して
-          // canvas全体の座標系に戻す(houghOffsetX/Yは切り出していない場合は0)
-          const x1 = lines.data32S[i * 4] + houghOffsetX;
-          const y1 = lines.data32S[i * 4 + 1] + houghOffsetY;
-          const x2 = lines.data32S[i * 4 + 2] + houghOffsetX;
-          const y2 = lines.data32S[i * 4 + 3] + houghOffsetY;
+            if (insertionAngle < minNeedleAngle || insertionAngle > maxNeedleAngle) continue;
 
-          const dx = x2 - x1;
-          const dy = y2 - y1;
-          const length = Math.sqrt(dx * dx + dy * dy);
-          if (length < 45) continue;
+            let metallicRatio = 0.5;
+            try { metallicRatio = metallicRatioAlongLine(x1, y1, x2, y2); } catch (e) { metallicRatio = 0.5; }
+            // 色条件に合う割合が高いほど加点(最大+40%)。合わなくても最低60%のスコアは残るため検出自体は妨げない
+            const score = (length - distToSkin * 0.7) * (0.6 + 0.4 * metallicRatio);
 
-          const mid = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
-          if (mid.x < roi.left || mid.x > roi.right) continue;
-
-          // YOLOのROIが利用できるフレームでは、Hough自体をその範囲だけに絞り込んでいるので
-          // (houghInput/houghOffsetX/Y参照)、ここでの追加フィルタは不要。
-
-          const signedDistToSkin = signedVerticalDistanceToSkin(mid, skinP1, skinP2);
-          const distToSkin = Math.abs(signedDistToSkin);
-
-          if (signedDistToSkin < 0) {
-            if (distToSkin > detectionBandUpperWidth) continue;
-          } else {
-            if (distToSkin > detectionBandLowerWidth) continue;
+            if (score > bestScore) {
+              bestScore = score;
+              bestLine = { x1, y1, x2, y2, angle: insertionAngle, length, distToSkin };
+            }
           }
-
-          const candidateLine = { x1, y1, x2, y2 };
-          const insertionAngle = calcInsertionAngle(candidateLine);
-
-          if (insertionAngle < minNeedleAngle || insertionAngle > maxNeedleAngle) continue;
-
-          let metallicRatio = 0.5;
-          try { metallicRatio = metallicRatioAlongLine(x1, y1, x2, y2); } catch (e) { metallicRatio = 0.5; }
-          // 色条件に合う割合が高いほど加点(最大+40%)。合わなくても最低60%のスコアは残るため検出自体は妨げない
-          const score = (length - distToSkin * 0.7) * (0.6 + 0.4 * metallicRatio);
-
-          if (score > bestScore) {
-            bestScore = score;
-            bestLine = { x1, y1, x2, y2, angle: insertionAngle, length, distToSkin };
-          }
-        }
+        } // if (yoloRoi)
 
         if (bestLine) {
           missStreak = 0;
