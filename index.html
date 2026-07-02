@@ -622,6 +622,7 @@
     const missGraceFrames = 6;   // このフレーム数までは直前の検出結果を維持（表示のちらつき防止。値の平均化はしない）
 
     let lastOkState = false;     // 適正角度に入った瞬間の検知用（バイブ通知トリガー）
+    let colorFilterFailStreak = 0; // 色フィルタが連続で失敗した回数（デバッグ表示用）
 
     const mirrorFix = false;
 
@@ -999,14 +1000,6 @@
       let edges = new cv.Mat();
       let lines = new cv.Mat();
 
-      let rgb = new cv.Mat();
-      let hsv = new cv.Mat();
-      let metallicMask = new cv.Mat();
-      let dilatedMask = new cv.Mat();
-      let dilateKernel = null;
-      let lowMetallic = null;
-      let highMetallic = null;
-
       let bestLine = null;
       let angleValue = null;
       let statusValue = "";
@@ -1017,8 +1010,6 @@
         cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
         cv.Canny(blur, edges, 55, 155);
 
-        // Hough変換自体は今まで通り「フィルタ前」のエッジ全体に対して行う
-        // （色条件で完全に弾くと、条件に合わない照明下で針が全く検出できなくなるため）
         cv.HoughLinesP(
           edges,
           lines,
@@ -1029,34 +1020,60 @@
           15
         );
 
-        // --- 色・輝度による「加点」用マスク ---
+        // --- 色・輝度による「加点」用マスク（失敗しても検出自体には絶対に影響させない）---
         // 針(金属)は肌・ドレープ等に比べて彩度が低く輝度が高い(反射)傾向があるため、
-        // その条件に合う候補線のスコアを上げる。合わない場合でも検出自体は妨げない（ハード除外はしない）。
-        cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
-        cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+        // その条件に合う候補線のスコアを上げる。ここで何か例外が起きても、
+        // metallicRatioAlongLine が「常に0.5(ニュートラル=加点も減点もしない)」を返す関数に
+        // フォールバックするだけで、下の検出ロジックには一切波及しない。
+        let metallicRatioAlongLine = () => 0.5;
+        let rgb = null, hsv = null, metallicMask = null, dilatedMask = null;
+        let lowMetallic = null, highMetallic = null, dilateKernel = null;
 
-        lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin]);
-        highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255]);
-        cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
+        try {
+          rgb = new cv.Mat();
+          hsv = new cv.Mat();
+          metallicMask = new cv.Mat();
+          dilatedMask = new cv.Mat();
 
-        dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
-        cv.dilate(metallicMask, dilatedMask, dilateKernel);
+          cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
+          cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
 
-        const maskData = dilatedMask.data; // Uint8Array, 1ch, 0 or 255
-        const maskCols = dilatedMask.cols;
-        const maskRows = dilatedMask.rows;
+          lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin]);
+          highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255]);
+          cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
 
-        function metallicRatioAlongLine(x1, y1, x2, y2) {
-          const sampleCount = 8;
-          let hit = 0;
-          for (let s = 0; s <= sampleCount; s++) {
-            const t = s / sampleCount;
-            const px = Math.round(x1 + (x2 - x1) * t);
-            const py = Math.round(y1 + (y2 - y1) * t);
-            if (px < 0 || px >= maskCols || py < 0 || py >= maskRows) continue;
-            if (maskData[py * maskCols + px] > 0) hit++;
-          }
-          return hit / (sampleCount + 1);
+          dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
+          cv.dilate(metallicMask, dilatedMask, dilateKernel);
+
+          const maskData = dilatedMask.data; // Uint8Array, 1ch, 0 or 255
+          const maskCols = dilatedMask.cols;
+          const maskRows = dilatedMask.rows;
+
+          metallicRatioAlongLine = function(x1, y1, x2, y2) {
+            const sampleCount = 8;
+            let hit = 0;
+            for (let s = 0; s <= sampleCount; s++) {
+              const t = s / sampleCount;
+              const px = Math.round(x1 + (x2 - x1) * t);
+              const py = Math.round(y1 + (y2 - y1) * t);
+              if (px < 0 || px >= maskCols || py < 0 || py >= maskRows) continue;
+              if (maskData[py * maskCols + px] > 0) hit++;
+            }
+            return hit / (sampleCount + 1);
+          };
+          colorFilterFailStreak = 0;
+        } catch (colorErr) {
+          console.warn("色フィルタでエラーが発生したため、加点なし(ニュートラル)で継続します:", colorErr);
+          metallicRatioAlongLine = () => 0.5;
+          colorFilterFailStreak++;
+        } finally {
+          if (rgb) rgb.delete();
+          if (hsv) hsv.delete();
+          if (metallicMask) metallicMask.delete();
+          if (dilatedMask) dilatedMask.delete();
+          if (lowMetallic) lowMetallic.delete();
+          if (highMetallic) highMetallic.delete();
+          if (dilateKernel) dilateKernel.delete();
         }
 
         let bestScore = 0;
@@ -1090,7 +1107,8 @@
 
           if (insertionAngle < minNeedleAngle || insertionAngle > maxNeedleAngle) continue;
 
-          const metallicRatio = metallicRatioAlongLine(x1, y1, x2, y2);
+          let metallicRatio = 0.5;
+          try { metallicRatio = metallicRatioAlongLine(x1, y1, x2, y2); } catch (e) { metallicRatio = 0.5; }
           // 色条件に合う割合が高いほど加点(最大+40%)。合わなくても最低60%のスコアは残るため検出自体は妨げない
           const score = (length - distToSkin * 0.7) * (0.6 + 0.4 * metallicRatio);
 
@@ -1132,6 +1150,10 @@
           }
         }
 
+        if (colorFilterFailStreak > 3 && statusValue) {
+          statusValue += "  ⚠色フィルタ停止中";
+        }
+
         // 適正角度域に「入った瞬間」だけ短くバイブレーションで通知（穿刺中は画面注視が難しいため）
         if (statusClassValue === "ok" && !lastOkState && navigator.vibrate) {
           navigator.vibrate(60);
@@ -1151,10 +1173,6 @@
         console.error(e);
       } finally {
         srcFull.delete(); gray.delete(); blur.delete(); edges.delete(); lines.delete();
-        rgb.delete(); hsv.delete(); metallicMask.delete(); dilatedMask.delete();
-        if (dilateKernel) dilateKernel.delete();
-        if (lowMetallic) lowMetallic.delete();
-        if (highMetallic) highMetallic.delete();
       }
 
       animationId = requestAnimationFrame(processFrame);
