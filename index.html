@@ -624,8 +624,8 @@
     let yoloHistory = []; // 直近2回分の{root,tip,t}。速度を推定して表示の遅れを見た目上減らすために使う
     let yoloFrameCounter = 0;
     const YOLO_MODEL_PATH = "./best.onnx";
-    const YOLO_INPUT_W = 960;
-    const YOLO_INPUT_H = 544; // 学習時のexport解像度(imgsz=[544,960])に合わせる
+    const YOLO_INPUT_W = 640;
+    const YOLO_INPUT_H = 384; // 学習時のexport解像度(imgsz=[384,640])に合わせる。960x544より軽量(推論速度は約2.2倍)
     const yoloConfThreshold = 0.35;
     const yoloRefreshEveryNFrames = 5; // YOLOは「だいたいの位置・向き」を教える役割に縮小。毎フレームの精密化はHoughが担当する
     
@@ -818,9 +818,9 @@
     // YOLOは「だいたいの位置・向き」を教えるだけ(更新頻度も低い)。実際の細かい位置合わせは
     // 毎フレーム軽量なCanny/Houghで、アンカー線に近い候補だけを対象に行う。
     // opencv.jsが未読込/エラー時は、アンカー線(YOLOの外挿値)をそのまま返す(精度は落ちるが検出自体は止めない)。
-    const houghRefinePadding = 40;      // アンカー線のbboxからどれだけ外側まで探索するか(px)
+    const houghRefinePadding = 55;      // アンカー線のbboxからどれだけ外側まで探索するか(px)
     const houghRefineMaxAngleDiff = 15; // アンカーとの角度差がこれを超える候補は無視(度)
-    const houghRefineMaxDist = 60;      // アンカーの中点からの距離がこれを超える候補は無視(px)
+    const houghRefineMaxDist = 75;      // アンカーの中点からの距離がこれを超える候補は無視(px)
 
     function refineLineWithHough(anchorLine) {
       if (typeof cv === "undefined" || !cv.Mat) return anchorLine;
