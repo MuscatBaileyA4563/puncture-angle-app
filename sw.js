@@ -1,11 +1,10 @@
-const CACHE_NAME = "puncture-angle-app-v4"; // v4: YOLO(needle)モデル + onnxruntime-web を追加
+const CACHE_NAME = "puncture-angle-app-v5"; // v5: opencv.js廃止、YOLO11n-pose(キーポイント版)モデルに切替
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
-  "./opencv.js",
   "./ort.wasm.min.js",
   "./ort-wasm-simd-threaded.mjs",
   "./ort-wasm-simd-threaded.wasm",
@@ -33,7 +32,7 @@ self.addEventListener("fetch", event => {
     fetch(event.request)
       .then(response => {
         // 同一オリジンのアセットはネットワーク成功時にもキャッシュを更新しておく
-        // （opencv.js を後から差し替えた場合などに追従できるように）
+        // （モデルファイルを後から差し替えた場合などに追従できるように）
         if (response && response.ok && event.request.url.startsWith(self.location.origin)) {
           const cloned = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, cloned)).catch(() => null);
