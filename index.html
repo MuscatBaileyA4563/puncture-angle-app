@@ -1001,7 +1001,6 @@
       let hsv = new cv.Mat();
       let metallicMask = new cv.Mat();
       let dilatedMask = new cv.Mat();
-      let maskedEdges = new cv.Mat();
       let dilateKernel = null;
       let lowMetallic = null;
       let highMetallic = null;
@@ -1016,24 +1015,10 @@
         cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
         cv.Canny(blur, edges, 55, 155);
 
-        // --- 色・輝度による事前フィルタ ---
-        // 針(金属)は肌・ドレープ等に比べて彩度が低く輝度が高い(反射)傾向があるため、
-        // その条件に合わない領域のCannyエッジを除外し、Hough変換に渡す候補を絞り込む。
-        cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
-        cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
-
-        lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin]);
-        highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255]);
-        cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
-
-        // Cannyのエッジはマスク境界の数px外側にずれることがあるため、マスクを少し膨張させて拾い漏れを防ぐ
-        dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
-        cv.dilate(metallicMask, dilatedMask, dilateKernel);
-
-        cv.bitwise_and(edges, dilatedMask, maskedEdges);
-
+        // Hough変換自体は今まで通り「フィルタ前」のエッジ全体に対して行う
+        // （色条件で完全に弾くと、条件に合わない照明下で針が全く検出できなくなるため）
         cv.HoughLinesP(
-          maskedEdges,
+          edges,
           lines,
           1,
           Math.PI / 180,
@@ -1041,6 +1026,36 @@
           50, 
           15
         );
+
+        // --- 色・輝度による「加点」用マスク ---
+        // 針(金属)は肌・ドレープ等に比べて彩度が低く輝度が高い(反射)傾向があるため、
+        // その条件に合う候補線のスコアを上げる。合わない場合でも検出自体は妨げない（ハード除外はしない）。
+        cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
+        cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+
+        lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin]);
+        highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255]);
+        cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
+
+        dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
+        cv.dilate(metallicMask, dilatedMask, dilateKernel);
+
+        const maskData = dilatedMask.data; // Uint8Array, 1ch, 0 or 255
+        const maskCols = dilatedMask.cols;
+        const maskRows = dilatedMask.rows;
+
+        function metallicRatioAlongLine(x1, y1, x2, y2) {
+          const sampleCount = 8;
+          let hit = 0;
+          for (let s = 0; s <= sampleCount; s++) {
+            const t = s / sampleCount;
+            const px = Math.round(x1 + (x2 - x1) * t);
+            const py = Math.round(y1 + (y2 - y1) * t);
+            if (px < 0 || px >= maskCols || py < 0 || py >= maskRows) continue;
+            if (maskData[py * maskCols + px] > 0) hit++;
+          }
+          return hit / (sampleCount + 1);
+        }
 
         let bestScore = 0;
         const roi = getCenterRoi();
@@ -1073,7 +1088,9 @@
 
           if (insertionAngle < minNeedleAngle || insertionAngle > maxNeedleAngle) continue;
 
-          const score = length - distToSkin * 0.7;
+          const metallicRatio = metallicRatioAlongLine(x1, y1, x2, y2);
+          // 色条件に合う割合が高いほど加点(最大+40%)。合わなくても最低60%のスコアは残るため検出自体は妨げない
+          const score = (length - distToSkin * 0.7) * (0.6 + 0.4 * metallicRatio);
 
           if (score > bestScore) {
             bestScore = score;
@@ -1132,7 +1149,7 @@
         console.error(e);
       } finally {
         srcFull.delete(); gray.delete(); blur.delete(); edges.delete(); lines.delete();
-        rgb.delete(); hsv.delete(); metallicMask.delete(); dilatedMask.delete(); maskedEdges.delete();
+        rgb.delete(); hsv.delete(); metallicMask.delete(); dilatedMask.delete();
         if (dilateKernel) dilateKernel.delete();
         if (lowMetallic) lowMetallic.delete();
         if (highMetallic) highMetallic.delete();
