@@ -665,7 +665,10 @@
 
     const processEveryNFrames = 2;
 
-    const minNeedleAngle = 2;
+    // 元々2°だったのは「背景の水平に近いノイズ線を誤って針と判定しないため」の安全マージンだったが、
+    // 今はYOLOが先にROIを絞り込んでいるため過剰に厳しい。皮内注射等の浅い角度(10°未満)も
+    // 検出できるよう緩和する。完全に0にしないのは、水平に近いノイズが極稀に紛れ込む場合の保険。
+    const minNeedleAngle = 0.5;
     const maxNeedleAngle = 75;
 
     // --- 色・輝度による事前フィルタ（誤検出低減） ---
@@ -1122,6 +1125,7 @@
       let blur = new cv.Mat();
       let edges = new cv.Mat();
       let lines = new cv.Mat();
+      let croppedEdges = null;
 
       let bestLine = null;
       let angleValue = null;
@@ -1133,8 +1137,29 @@
         cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
         cv.Canny(blur, edges, 55, 155);
 
+        // YOLOが認識できているフレームは、その範囲(+padding)だけを切り出してHoughを実行する。
+        // 画面全体を毎回スキャンするより高速な上、範囲外の紛らわしい線を最初から候補にしない。
+        // YOLOが未検出/未読み込みのフレームは、従来通り画面全体に対してHoughを実行する(フォールバック)。
+        let houghInput = edges;
+        let houghOffsetX = 0, houghOffsetY = 0;
+
+        if (yoloRoi) {
+          const rx = Math.max(0, Math.floor(yoloRoi.x1 - yoloRoiPadding));
+          const ry = Math.max(0, Math.floor(yoloRoi.y1 - yoloRoiPadding));
+          const rw = Math.min(canvasW, Math.ceil(yoloRoi.x2 + yoloRoiPadding)) - rx;
+          const rh = Math.min(canvasH, Math.ceil(yoloRoi.y2 + yoloRoiPadding)) - ry;
+
+          if (rw > 10 && rh > 10) {
+            const rect = new cv.Rect(rx, ry, rw, rh);
+            croppedEdges = edges.roi(rect);
+            houghInput = croppedEdges;
+            houghOffsetX = rx;
+            houghOffsetY = ry;
+          }
+        }
+
         cv.HoughLinesP(
-          edges,
+          houghInput,
           lines,
           1,
           Math.PI / 180,
@@ -1203,10 +1228,12 @@
         const roi = getCenterRoi();
 
         for (let i = 0; i < lines.rows; i++) {
-          const x1 = lines.data32S[i * 4];
-          const y1 = lines.data32S[i * 4 + 1];
-          const x2 = lines.data32S[i * 4 + 2];
-          const y2 = lines.data32S[i * 4 + 3];
+          // houghInputが切り出しMatの場合、座標はそのMat内でのローカル座標なのでオフセットを足して
+          // canvas全体の座標系に戻す(houghOffsetX/Yは切り出していない場合は0)
+          const x1 = lines.data32S[i * 4] + houghOffsetX;
+          const y1 = lines.data32S[i * 4 + 1] + houghOffsetY;
+          const x2 = lines.data32S[i * 4 + 2] + houghOffsetX;
+          const y2 = lines.data32S[i * 4 + 3] + houghOffsetY;
 
           const dx = x2 - x1;
           const dy = y2 - y1;
@@ -1216,14 +1243,8 @@
           const mid = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
           if (mid.x < roi.left || mid.x > roi.right) continue;
 
-          // YOLOのROIが利用できるフレームでは、その矩形(+padding)の外にある候補は除外する。
-          // YOLO未読み込み/推論失敗時は yoloRoi が null のままなので、このフィルタは素通りする(従来通りの動作)。
-          if (yoloRoi) {
-            if (
-              mid.x < yoloRoi.x1 - yoloRoiPadding || mid.x > yoloRoi.x2 + yoloRoiPadding ||
-              mid.y < yoloRoi.y1 - yoloRoiPadding || mid.y > yoloRoi.y2 + yoloRoiPadding
-            ) continue;
-          }
+          // YOLOのROIが利用できるフレームでは、Hough自体をその範囲だけに絞り込んでいるので
+          // (houghInput/houghOffsetX/Y参照)、ここでの追加フィルタは不要。
 
           const signedDistToSkin = signedVerticalDistanceToSkin(mid, skinP1, skinP2);
           const distToSkin = Math.abs(signedDistToSkin);
@@ -1305,6 +1326,7 @@
         console.error(e);
       } finally {
         srcFull.delete(); gray.delete(); blur.delete(); edges.delete(); lines.delete();
+        if (croppedEdges) croppedEdges.delete();
       }
 
       animationId = requestAnimationFrame(processFrame);
