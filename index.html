@@ -640,10 +640,11 @@
     const handleHitRadius = 42;
     const lineHitTolerance = 34;
 
-    const detectionBandUpperWidth = canvasH / 5;
+    // 上側(皮膚から浮いている側)の帯を以前(canvasH/5)より狭くし、画面奥の背景(ベッド柵など)を拾いにくくする。
+    // 狭くしすぎると、急な角度(70°台)で針の長さが短い場合に検出漏れが増えるトレードオフがあるため要調整。
+    const detectionBandUpperWidth = canvasH / 7;
     const detectionBandLowerWidth = canvasH / 12;
 
-    const centerRoiRate = 0.75;
     const processEveryNFrames = 2;
 
     const minNeedleAngle = 2;
@@ -1038,8 +1039,8 @@
           cv.cvtColor(srcFull, rgb, cv.COLOR_RGBA2RGB);
           cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
 
-          lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin]);
-          highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255]);
+          lowMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, metallicValMin, 0]);
+          highMetallic = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [179, metallicSatMax, 255, 255]);
           cv.inRange(hsv, lowMetallic, highMetallic, metallicMask);
 
           dilateKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(metallicMaskDilate, metallicMaskDilate));
@@ -1316,9 +1317,14 @@
     }
 
     function getCenterRoi() {
-      const width = canvasW * centerRoiRate;
-      const left = (canvasW - width) / 2;
-      return { left, right: left + width };
+      // 画面中央固定ではなく、皮膚基準線(ユーザーがドラッグで指定)のx範囲に連動させる。
+      // カメラのフレーミングで腕が中央からずれていても、背景(ベッド柵など)を拾いにくくなる。
+      const segLeft = Math.min(skinP1.x, skinP2.x);
+      const segRight = Math.max(skinP1.x, skinP2.x);
+      const margin = (segRight - segLeft) * 0.12;
+      const left = clamp(segLeft - margin, 0, canvasW);
+      const right = clamp(segRight + margin, 0, canvasW);
+      return { left, right };
     }
 
     function drawDetectionRoi() {
