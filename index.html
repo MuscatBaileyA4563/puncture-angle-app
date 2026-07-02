@@ -627,7 +627,7 @@
     const YOLO_INPUT_W = 640;
     const YOLO_INPUT_H = 384; // 学習時のexport解像度(imgsz=[384,640])に合わせる。960x544より軽量(推論速度は約2.2倍)
     const yoloConfThreshold = 0.35;
-    const yoloRefreshEveryNFrames = 5; // YOLOは「だいたいの位置・向き」を教える役割に縮小。毎フレームの精密化はHoughが担当する
+    const yoloRefreshEveryNFrames = 1; // 毎フレームYOLOを実行。負荷が高い場合は数値を上げて間引く
     
     let lastBestLine = null;
     let lastAngleValue = null;
