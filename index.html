@@ -628,7 +628,7 @@
     const YOLO_INPUT_H = 544; // 学習時のexport解像度(imgsz=[544,960])に合わせる
     const yoloConfThreshold = 0.35;
     const yoloRoiPadding = 60;          // YOLOのbboxに対して、Hough候補をどれだけ外側まで許容するか(px)
-    const yoloRefreshEveryNFrames = 8; // Houghが完全にYOLOのROI頼りになったため、以前より頻度を上げて反応を速くする
+    const yoloRefreshEveryNFrames = 3; // Houghが完全にYOLOのROI頼りになったため反応速度を優先。CPU負荷が高い場合は要調整
     
     let lastBestLine = null;
     let lastAngleValue = null;
