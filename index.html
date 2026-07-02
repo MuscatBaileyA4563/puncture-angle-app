@@ -534,6 +534,10 @@
           <span class="material-symbols-rounded" style="font-size: 18px;">history</span>
           <span>確認</span>
           <input type="range" id="frameSlider" min="0" max="0" value="0" step="1" disabled oninput="onSliderMove()" />
+          <button type="button" id="reanalyzeBtn" onclick="reanalyzeCurrentFrame()" disabled style="white-space:nowrap;">
+            <span class="material-symbols-rounded btnIcon" style="font-size:18px;">auto_awesome</span>
+            <span class="btnText">AIで再解析</span>
+          </button>
         </div>
 
         <div class="ui-box depthBox">
@@ -822,12 +826,12 @@
     const houghRefineMaxAngleDiff = 15; // アンカーとの角度差がこれを超える候補は無視(度)
     const houghRefineMaxDist = 75;      // アンカーの中点からの距離がこれを超える候補は無視(px)
 
-    function refineLineWithHough(anchorLine) {
+    function refineLineWithHough(anchorLine, sourceCanvas = hiddenCanvas) {
       if (typeof cv === "undefined" || !cv.Mat) return anchorLine;
 
       let srcFull = null, gray = null, blur = null, edges = null, lines = null, croppedEdges = null;
       try {
-        srcFull = cv.imread(hiddenCanvas);
+        srcFull = cv.imread(sourceCanvas);
         gray = new cv.Mat();
         blur = new cv.Mat();
         edges = new cv.Mat();
@@ -1095,6 +1099,7 @@
 
         setPauseButtonState(false);
         frameSlider.disabled = true;
+        document.getElementById("reanalyzeBtn").disabled = true;
         frameSlider.min = 0;
         frameSlider.max = 0;
         frameSlider.value = 0;
@@ -1138,6 +1143,7 @@
       updateFloatingLabel(null);
 
       frameSlider.disabled = true;
+      document.getElementById("reanalyzeBtn").disabled = true;
       frameSlider.min = 0;
       frameSlider.max = 0;
       frameSlider.value = 0;
@@ -1160,15 +1166,19 @@
         updateStatusWithSparkle("測定中", "");
         reviewIndex = -1;
         frameSlider.disabled = true;
+        document.getElementById("reanalyzeBtn").disabled = true;
         processFrame();
       }
     }
 
     function setupSliderForReview() {
       if (frameBuffer.length <= 0) {
-        frameSlider.disabled = true; frameSlider.min = 0; frameSlider.max = 0; frameSlider.value = 0; return;
+        frameSlider.disabled = true; frameSlider.min = 0; frameSlider.max = 0; frameSlider.value = 0;
+        document.getElementById("reanalyzeBtn").disabled = true;
+        return;
       }
       frameSlider.disabled = false;
+      document.getElementById("reanalyzeBtn").disabled = false;
       frameSlider.min = 0;
       frameSlider.max = frameBuffer.length - 1;
       frameSlider.step = 1;
@@ -1276,7 +1286,7 @@
         ctx.clearRect(0, 0, canvasW, canvasH);
         let floatingData = drawOverlays(lastBestLine, angleValue, statusValue, statusClassValue);
         updateFloatingLabel(floatingData);
-        saveCurrentFrame(angleValue, statusValue, statusClassValue, floatingData);
+        saveCurrentFrame(lastBestLine, angleValue, statusValue, statusClassValue, floatingData);
 
       } catch (e) {
         console.error(e);
@@ -1340,9 +1350,9 @@
       ctx.restore();
     }
 
-    function drawOverlays(bestLine, angleValue, statusValue, statusClassValue) {
+    function drawOverlays(bestLine, angleValue, statusValue, statusClassValue, showYoloDebug = true) {
       drawSkinReferenceLine();
-      drawYoloRoiDebug();
+      if (showYoloDebug) drawYoloRoiDebug();
 
       let floatingData = null;
 
@@ -1385,13 +1395,16 @@
       }
     }
 
-    function saveCurrentFrame(angleValue, statusValue, statusClassValue, floatingData) {
+    function saveCurrentFrame(bestLine, angleValue, statusValue, statusClassValue, floatingData) {
       if (!processing) return;
-      hiddenCtx.drawImage(canvas, 0, 0, canvasW, canvasH);
-      const compositeData = hiddenCtx.getImageData(0, 0, canvasW, canvasH);
-      
+      // captureVideoToHidden()でこのフレームの冒頭に書き込まれた「生のカメラ画像」をそのまま保存する。
+      // (以前はcanvas全体=オーバーレイ込みの合成画像を保存していたが、それだと後からAI再解析する際に
+      //  自分で描いた線や枠をノイズとして誤認識してしまうため、生画像+検出結果(座標)を別々に保持する)
+      const rawData = hiddenCtx.getImageData(0, 0, canvasW, canvasH);
+
       frameBuffer.push({
-        imageData: compositeData,
+        imageData: rawData,
+        bestLine: bestLine ? { x1: bestLine.x1, y1: bestLine.y1, x2: bestLine.x2, y2: bestLine.y2 } : null,
         angle: angleValue,
         status: statusValue,
         statusClass: statusClassValue,
@@ -1406,7 +1419,12 @@
     function showBufferedFrame(index) {
       if (index < 0 || index >= frameBuffer.length) return;
       const frame = frameBuffer[index];
-      ctx.putImageData(frame.imageData, 0, 0); 
+      ctx.putImageData(frame.imageData, 0, 0);
+
+      // 保存されている座標から、その場でオーバーレイ(皮膚基準線・針の線)を描き直す。
+      // ライブ中のYOLO枠デバッグ表示(drawYoloRoiDebug)は今このフレームのものではないので出さない。
+      const floatingData = drawOverlays(frame.bestLine, frame.angle, frame.status, frame.statusClass, false);
+
       if (frame.angle !== null) {
         angleText.textContent = frame.angle.toFixed(1) + "°";
         updateReachDisplay(frame.angle);
@@ -1417,8 +1435,83 @@
       updateStatusWithSparkle((frame.status || "確認中"), frame.statusClass || "paused");
       reviewIndex = index;
       frameSlider.value = index;
-      
-      updateFloatingLabel(frame.floatingData);
+
+      updateFloatingLabel(floatingData);
+    }
+
+    // レビュー中の静止画に対して、リアルタイムの時間制約を気にせずAI(YOLO)+Houghの再解析を行う。
+    // リアルタイム中は外挿・間引きによる多少のズレが避けられないが、静止画なら手間をかけて追い込める。
+    let reanalyzing = false;
+    async function reanalyzeCurrentFrame() {
+      if (reanalyzing) return;
+      if (reviewIndex < 0 || reviewIndex >= frameBuffer.length) return;
+      if (!yoloReady || !yoloSession) {
+        alert("AIモデルが読み込まれていないため、再解析できません。");
+        return;
+      }
+
+      const btn = document.getElementById("reanalyzeBtn");
+      reanalyzing = true;
+      const prevLabel = btn.querySelector(".btnText").textContent;
+      btn.disabled = true;
+      btn.querySelector(".btnText").textContent = "解析中…";
+
+      try {
+        const frame = frameBuffer[reviewIndex];
+
+        // 保存されている生画像を一時canvasに展開し、YOLO/Houghの入力として使う
+        const tempCanvas = document.createElement("canvas");
+        tempCanvas.width = canvasW;
+        tempCanvas.height = canvasH;
+        tempCanvas.getContext("2d").putImageData(frame.imageData, 0, 0);
+
+        const { tensor, scale, padX, padY } = preprocessForYolo(tempCanvas);
+        const feeds = {};
+        feeds[yoloSession.inputNames[0]] = tensor;
+        const results = await yoloSession.run(feeds);
+        const output = results[yoloSession.outputNames[0]];
+        const yoloParsed = parseYoloOutput(output, scale, padX, padY, tempCanvas.width, tempCanvas.height);
+
+        let newBestLine = null;
+        let newAngle = null;
+        let newStatus = "";
+        let newStatusClass = "";
+
+        if (yoloParsed) {
+          const anchorLine = { x1: yoloParsed.root.x, y1: yoloParsed.root.y, x2: yoloParsed.tip.x, y2: yoloParsed.tip.y };
+          const refined = refineLineWithHough(anchorLine, tempCanvas);
+          const insertionAngle = calcInsertionAngle(refined);
+
+          if (insertionAngle >= minNeedleAngle && insertionAngle <= maxNeedleAngle) {
+            newBestLine = refined;
+            newAngle = insertionAngle;
+            const judge = getJudgeResult(newAngle);
+            newStatus = judge.text;
+            newStatusClass = judge.className;
+          }
+        }
+
+        if (!newBestLine) {
+          newStatus = "針を検出できません";
+          newStatusClass = "warn";
+        }
+
+        // このフレームの保存データを、再解析結果で上書きする
+        frame.bestLine = newBestLine;
+        frame.angle = newAngle;
+        frame.status = newStatus + "（AI再解析済み）";
+        frame.statusClass = newStatusClass;
+
+        showBufferedFrame(reviewIndex);
+
+      } catch (e) {
+        console.error("再解析でエラーが発生しました:", e);
+        alert("再解析に失敗しました。");
+      } finally {
+        reanalyzing = false;
+        btn.disabled = false;
+        btn.querySelector(".btnText").textContent = prevLabel;
+      }
     }
 
     function getLineAngleDegFromCoords(x1, y1, x2, y2) { return Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI; }
