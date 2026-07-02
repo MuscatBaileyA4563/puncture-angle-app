@@ -539,7 +539,7 @@
         <div class="ui-box depthBox">
           <span class="material-symbols-rounded" style="font-size: 18px; color: var(--primary);">straighten</span>
           <label for="depthSlider" style="white-space: nowrap;">深さ: <span id="depthLabel" style="font-weight: 900; font-size: 16px; color: #fff;">3.0</span> mm</label>
-          <input type="range" id="depthSlider" min="1.0" max="8.0" value="3.0" step="0.1" oninput="updateDepthFromSlider()"  />
+          <input type="range" id="depthSlider" min="1.0" max="10.0" value="3.0" step="0.1" oninput="updateDepthFromSlider()"  />
         </div>
       </div>
 
@@ -1403,10 +1403,12 @@
         if (!isFinite(obtuseDir.x) || !isFinite(obtuseDir.y)) obtuseDir = { x: -needleUnit.y, y: needleUnit.x };
         if (obtuseDir.y > 0) obtuseDir = { x: -obtuseDir.x, y: -obtuseDir.y };
         
-        center = { x: pointer.x + obtuseDir.x * 96, y: pointer.y + obtuseDir.y * 76 };
+        // ラベル枠(角度＋到達距離の2行)が刺入部や針線に重ならないよう、鈍角側に十分な距離を取って離す
+        const labelOffsetDistance = 150;
+        center = { x: pointer.x + obtuseDir.x * labelOffsetDistance, y: pointer.y + obtuseDir.y * (labelOffsetDistance * 0.8) };
         
-        center.x = clamp(center.x, 120, canvasW - 120);
-        center.y = clamp(center.y, 110, canvasH - 50);
+        center.x = clamp(center.x, 130, canvasW - 130);
+        center.y = clamp(center.y, 120, canvasH - 60);
       }
 
       if (pointer) {
