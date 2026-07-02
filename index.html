@@ -566,6 +566,7 @@
   </div>
 
   <script async src="./opencv.js"></script>
+  <script src="./ort.wasm.min.js"></script>
 
   <script>
     const video = document.getElementById("video");
@@ -611,6 +612,23 @@
     let cvReady = false;
     let animationId = null;
     let frameCount = 0;
+
+    // --- YOLO(needle検出モデル)関連 ---
+    // 役割分担：YOLOは「針がだいたいどこにあるか」の大まかな矩形(ROI)を出すだけに使い、
+    // 正確な角度計算は今まで通りCanny/Houghの直線フィットで行う。
+    // YOLOが読み込めない/推論に失敗しても、Hough単体の従来動作にフォールバックするだけで
+    // アプリ自体は動き続けるようにする（opencv.jsの色フィルタと同じ考え方）。
+    let yoloSession = null;
+    let yoloReady = false;
+    let yoloBusy = false;
+    let yoloRoi = null; // {x1,y1,x2,y2,conf} canvas(960x540)座標系。null=制約なし(Hough単体)
+    let yoloFrameCounter = 0;
+    const YOLO_MODEL_PATH = "./best.onnx";
+    const YOLO_INPUT_W = 960;
+    const YOLO_INPUT_H = 544; // 学習時のexport解像度(imgsz=[544,960])に合わせる
+    const yoloConfThreshold = 0.35;
+    const yoloRoiPadding = 60;          // YOLOのbboxに対して、Hough候補をどれだけ外側まで許容するか(px)
+    const yoloRefreshEveryNFrames = 15; // 推論コストが高いため、数フレームに1回だけ更新する
     
     let lastBestLine = null;
     let lastAngleValue = null;
@@ -670,6 +688,104 @@
       }
     }
     waitForOpenCV();
+
+    // --- YOLO(onnxruntime-web)初期化 ---
+    // ネットワークが無くても動くよう、モデル自体はローカルの ./best.onnx を読む(sw.jsで事前キャッシュ対象)。
+    // COOP/COEP等のクロスオリジン分離ヘッダーが無い一般的な静的ホスティングでも動くように
+    // マルチスレッドを無効化(numThreads=1)して単一スレッドで実行する。
+    async function initYolo() {
+      if (typeof ort === "undefined") {
+        console.warn("onnxruntime-webの読み込みに失敗しました。YOLOによるROI絞り込みなしで動作します。");
+        return;
+      }
+      try {
+        ort.env.wasm.wasmPaths = "./";
+        ort.env.wasm.numThreads = 1;
+        yoloSession = await ort.InferenceSession.create(YOLO_MODEL_PATH, {
+          executionProviders: ["wasm"]
+        });
+        yoloReady = true;
+      } catch (e) {
+        console.warn("YOLOモデルの読み込みに失敗しました。Hough単体の従来検出で継続します:", e);
+        yoloReady = false;
+      }
+    }
+    initYolo();
+
+    // 960x540の入力canvasを、レターボックス(灰色114埋め)でYOLOの入力サイズ(960x544)に変換し、
+    // CHW/float32/0-1正規化のテンソルを作る
+    function preprocessForYolo(sourceCanvas) {
+      const scale = Math.min(YOLO_INPUT_W / sourceCanvas.width, YOLO_INPUT_H / sourceCanvas.height);
+      const nw = Math.round(sourceCanvas.width * scale);
+      const nh = Math.round(sourceCanvas.height * scale);
+      const padX = Math.floor((YOLO_INPUT_W - nw) / 2);
+      const padY = Math.floor((YOLO_INPUT_H - nh) / 2);
+
+      const tmp = document.createElement("canvas");
+      tmp.width = YOLO_INPUT_W; tmp.height = YOLO_INPUT_H;
+      const tctx = tmp.getContext("2d", { willReadFrequently: true });
+      tctx.fillStyle = "rgb(114,114,114)";
+      tctx.fillRect(0, 0, YOLO_INPUT_W, YOLO_INPUT_H);
+      tctx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, padX, padY, nw, nh);
+
+      const imgData = tctx.getImageData(0, 0, YOLO_INPUT_W, YOLO_INPUT_H).data;
+      const planeSize = YOLO_INPUT_W * YOLO_INPUT_H;
+      const chw = new Float32Array(3 * planeSize);
+      for (let i = 0; i < planeSize; i++) {
+        chw[i] = imgData[i * 4] / 255;                   // R
+        chw[planeSize + i] = imgData[i * 4 + 1] / 255;    // G
+        chw[planeSize * 2 + i] = imgData[i * 4 + 2] / 255; // B
+      }
+
+      return {
+        tensor: new ort.Tensor("float32", chw, [1, 3, YOLO_INPUT_H, YOLO_INPUT_W]),
+        scale, padX, padY
+      };
+    }
+
+    // 出力[1,5,N] (xc,yc,w,h,conf) から最も信頼度の高い候補を選び、元のcanvas(960x540)座標に逆変換する
+    function parseYoloOutput(outputTensor, scale, padX, padY, origW, origH) {
+      const data = outputTensor.data;
+      const numPreds = outputTensor.dims[2];
+      let bestIdx = -1, bestConf = yoloConfThreshold;
+      for (let i = 0; i < numPreds; i++) {
+        const conf = data[4 * numPreds + i];
+        if (conf > bestConf) { bestConf = conf; bestIdx = i; }
+      }
+      if (bestIdx === -1) return null;
+
+      const xc = (data[0 * numPreds + bestIdx] - padX) / scale;
+      const yc = (data[1 * numPreds + bestIdx] - padY) / scale;
+      const w = data[2 * numPreds + bestIdx] / scale;
+      const h = data[3 * numPreds + bestIdx] / scale;
+
+      const x1 = clamp(xc - w / 2, 0, origW);
+      const y1 = clamp(yc - h / 2, 0, origH);
+      const x2 = clamp(xc + w / 2, 0, origW);
+      const y2 = clamp(yc + h / 2, 0, origH);
+
+      return { x1, y1, x2, y2, conf: bestConf };
+    }
+
+    // YOLO推論は重いので、待たずに裏で実行し(fire-and-forget)、結果は次回以降のフレームから反映する。
+    // 呼び出し中に次の呼び出しが来ても多重実行しないようyoloBusyで排他制御する。
+    async function runYoloDetection(sourceCanvas) {
+      if (!yoloReady || yoloBusy || !yoloSession) return;
+      yoloBusy = true;
+      try {
+        const { tensor, scale, padX, padY } = preprocessForYolo(sourceCanvas);
+        const feeds = {};
+        feeds[yoloSession.inputNames[0]] = tensor;
+        const results = await yoloSession.run(feeds);
+        const output = results[yoloSession.outputNames[0]];
+        yoloRoi = parseYoloOutput(output, scale, padX, padY, sourceCanvas.width, sourceCanvas.height);
+      } catch (e) {
+        console.warn("YOLO推論でエラーが発生しました。次回のROI更新まで従来検出のみで継続します:", e);
+      } finally {
+        yoloBusy = false;
+      }
+    }
+
     setPauseButtonState(false);
 
     window.addEventListener("resize", function() {
@@ -995,6 +1111,12 @@
 
       captureVideoToHidden();
       let srcFull = cv.imread(hiddenCanvas);
+
+      // YOLOは重いので毎フレームではなく間引いて実行し、結果(yoloRoi)は次フレーム以降に反映される
+      yoloFrameCounter++;
+      if (yoloReady && !yoloBusy && yoloFrameCounter % yoloRefreshEveryNFrames === 0) {
+        runYoloDetection(hiddenCanvas);
+      }
       
       let gray = new cv.Mat();
       let blur = new cv.Mat();
@@ -1093,6 +1215,15 @@
 
           const mid = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
           if (mid.x < roi.left || mid.x > roi.right) continue;
+
+          // YOLOのROIが利用できるフレームでは、その矩形(+padding)の外にある候補は除外する。
+          // YOLO未読み込み/推論失敗時は yoloRoi が null のままなので、このフィルタは素通りする(従来通りの動作)。
+          if (yoloRoi) {
+            if (
+              mid.x < yoloRoi.x1 - yoloRoiPadding || mid.x > yoloRoi.x2 + yoloRoiPadding ||
+              mid.y < yoloRoi.y1 - yoloRoiPadding || mid.y > yoloRoi.y2 + yoloRoiPadding
+            ) continue;
+          }
 
           const signedDistToSkin = signedVerticalDistanceToSkin(mid, skinP1, skinP2);
           const distToSkin = Math.abs(signedDistToSkin);
@@ -1220,9 +1351,24 @@
       reachInfo.textContent = texts.full;
     }
 
+    function drawYoloRoiDebug() {
+      if (!yoloRoi) return;
+      ctx.save();
+      ctx.strokeStyle = "#60a5fa";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(yoloRoi.x1, yoloRoi.y1, yoloRoi.x2 - yoloRoi.x1, yoloRoi.y2 - yoloRoi.y1);
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#60a5fa";
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillText(`YOLO ${(yoloRoi.conf * 100).toFixed(0)}%`, yoloRoi.x1, Math.max(12, yoloRoi.y1 - 6));
+      ctx.restore();
+    }
+
     function drawOverlays(bestLine, angleValue, statusValue, statusClassValue) {
       drawDetectionRoi();
       drawSkinReferenceLine();
+      drawYoloRoiDebug();
 
       let floatingData = null;
 

@@ -1,11 +1,15 @@
-const CACHE_NAME = "puncture-angle-app-v3"; // v3: opencv.js を自前ホストして事前キャッシュ
+const CACHE_NAME = "puncture-angle-app-v4"; // v4: YOLO(needle)モデル + onnxruntime-web を追加
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
-  "./opencv.js"
+  "./opencv.js",
+  "./ort.wasm.min.js",
+  "./ort-wasm-simd-threaded.mjs",
+  "./ort-wasm-simd-threaded.wasm",
+  "./best.onnx"
 ];
 
 self.addEventListener("install", event => {
