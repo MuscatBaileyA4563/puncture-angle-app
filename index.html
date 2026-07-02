@@ -627,7 +627,7 @@
     const YOLO_INPUT_W = 960;
     const YOLO_INPUT_H = 544; // 学習時のexport解像度(imgsz=[544,960])に合わせる
     const yoloConfThreshold = 0.35;
-    const yoloRefreshEveryNFrames = 10; // YOLOは「だいたいの位置・向き」を教える役割に縮小。毎フレームの精密化はHoughが担当する
+    const yoloRefreshEveryNFrames = 5; // YOLOは「だいたいの位置・向き」を教える役割に縮小。毎フレームの精密化はHoughが担当する
     
     let lastBestLine = null;
     let lastAngleValue = null;
